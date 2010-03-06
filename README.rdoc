@@ -1,0 +1,28 @@
+=ePerspectives
+<b>ePerspectives</b> aims to be a pure-erlang implementation of a Perspectives client, API and Notary server/scanner, though currently only the client is being worked on. Thanks to the concurrency features of erlang, the server/scanner should be able to handle several requests at once without much difficulty.
+
+=About Perspectives
+<b>Perspectives</b> makes use of a network of "notary servers" around the world to retrieve a given website's SSL certificate from multiple vantage points, so as to diminish the effectivity of a MITM (man-in-the-middle) attack.
+
+Basically, man-in-the-middle attacks work by tampering with the connection between the user and a given server, and, say, diverging the connection to a malicious copy of the website. By providing different levels of authentication, SSL can help guarantee that the connection is not being tampered with. Unfortunately, this comes at a sometimes unfeasible cost, and can't always ensure that the received certificate belongs to the real website. For example, if the attacker gets a certificate from a "Certificate Authority" for his fake website, then the user might not notice anything unusual unless they manually verify it.
+
+By probing the target website from multiple "perspectives", one diminishes the probability of being fooled by a fake certificate. This is because it would require compromising several paths to the website at the same time. If even one of them is kept intact, the user can easily notice it by checking the discrepancies in the reported fingerprints. Furthermore, each server keeps a record of the keys used by servers over time, so a suspicious recent change in the fingerprint can be noticed as well.
+
+For more information and a paper on Perspectives, please visit the official website at http://www.cs.cmu.edu/~perspectives
+
+=Usage
+
+Note: since this software is very early in development, I cannot guarantee that the API will remain the same.
+
+User interaction is done through the <b>persp_interface</b> module:
+* Function_name/Arity - [Arguments]: Description
+* start/0 - []: spawns a "blank" persp_client instance, and is required before any of the other functions below;
+* scan_service_id/1 - ["DOMAIN:PORT,TYPE"]: requests a scan from the notary servers; currently, TYPE can only be 2 (it means https);
+* scan/3 - [Domain, Port, Type]: same as above;
+* print_results/0 - []: prints the scan results that have already been received;
+* add_server/3 - [IP, Port, Public_Key]: adds a notary server to the servers list; currently, Public_Key is required but ignored (signature verification is not done yet);
+* del_server/1 - [IP]: deletes a notary server from the servers list
+
+=License
+
+This project is licensed under the EPL 1.0.
