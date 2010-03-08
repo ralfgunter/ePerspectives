@@ -20,7 +20,7 @@ parse_server_result([], ParsedList) ->
 parse_server_result([{error, Reason, IP} | Rest], ParsedList) ->
 	parse_server_result(Rest, [{error, Reason, IP} | ParsedList]);
 
-parse_server_result([{ok, {Address, _Port, Data}} | Rest], ParsedList) ->
+parse_server_result([{{ok, {Address, _Port, Data}}, PKey} | Rest], ParsedList) ->
 	<<_:16, Total_len:16, _:16, Name_len:16, Sig_len:16, PostHeader/binary>> = Data,
 	
 	% The notary_header struct occupies 10 bytes; after it is the service id
@@ -29,10 +29,18 @@ parse_server_result([{ok, {Address, _Port, Data}} | Rest], ParsedList) ->
 	Data_len   = Total_len - Sig_len - Header_len,
 	
 	% Strips away the notary_header, service id (SID) and signature info.
-	<<_SID:Name_len/bytes, Key_info:Data_len/bytes, _/binary>> = PostHeader,
+	<<SID:Name_len/bytes, Key_info:Data_len/bytes, Sig/binary>> = PostHeader,
 	
-	Result = parse_key_info(Key_info),
-	parse_server_result(Rest, [{Address, Result} | ParsedList]).
+	% Verifies the signature
+	SignedData = <<SID/binary, Key_info/binary>>,
+	case persp_crypto:verify_rsa_signature(SignedData, Sig, PKey) of
+		true ->
+			Result = {Address, parse_key_info(Key_info)};
+		false ->
+			Result = {error, signature_check_failed, Address}
+	end,
+
+	parse_server_result(Rest, [Result | ParsedList]).
 
 
 %% Parse individual keys

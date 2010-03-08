@@ -20,7 +20,7 @@ User interaction is done through the <b>persp_interface</b> module:
 * scan_service_id/1 - ["DOMAIN:PORT,TYPE"]: requests a scan from the notary servers; currently, TYPE can only be 2 (it means https);
 * scan/3 - [Domain, Port, Type]: same as above;
 * print_results/0 - []: prints the scan results that have already been received;
-* add_server/3 - [IP, Port, Public_Key]: adds a notary server to the servers list; currently, Public_Key is required but ignored (signature verification is not done yet);
+* add_server/3 - [IP, Port, Public_Key]: adds a notary server to the servers list;
 * del_server/1 - [IP]: deletes a notary server from the servers list
 
 =License

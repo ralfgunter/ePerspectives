@@ -68,13 +68,13 @@ scan_service_id(From, Service_ID, Server_List, Socket) ->
 
 scan_service_id(From, _Service_ID, [], Results, _Socket) ->
 	From ! #scan_results{results = Results};
-scan_service_id(From, Service_ID, [{IP, Port, _PubKey} | Rest], Results, Socket) ->
+scan_service_id(From, Service_ID, [{IP, Port, PubKey} | Rest], Results, Socket) ->
 	Packet = prepare_header(Service_ID),
 	gen_udp:send(Socket, IP, Port, Packet),
 	Response = gen_udp:recv(Socket, ?MAX_PACKET_LEN, ?TIMEOUT),
 	case Response of
 		{ok, _} ->
-			scan_service_id(From, Service_ID, Rest, [Response | Results], Socket);
+			scan_service_id(From, Service_ID, Rest, [{Response, PubKey} | Results], Socket);
 		{error, Reason} ->
 			ErrorWithIP = {error, Reason, IP},
 			scan_service_id(From, Service_ID, Rest, [ErrorWithIP | Results], Socket)
