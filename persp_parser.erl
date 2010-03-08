@@ -21,13 +21,15 @@ parse_server_result([{error, Reason, IP} | Rest], ParsedList) ->
 	parse_server_result(Rest, [{error, Reason, IP} | ParsedList]);
 
 parse_server_result([{ok, {Address, _Port, Data}} | Rest], ParsedList) ->
-	Header_length = ((lists:nth(7, Data) bsl 8) bxor lists:nth( 8, Data)) + 10,
-	Total_length  = ((lists:nth(3, Data) bsl 8) bxor lists:nth( 4, Data)),
-	Sig_length    = ((lists:nth(9, Data) bsl 8) bxor lists:nth(10, Data)),
-	Data_length = Total_length - Sig_length - Header_length,
+	<<_:16, Total_len:16, _:16, Name_len:16, Sig_len:16, PostHeader/binary>> = Data,
 	
-	% Strips away the notary_header and signature info
-	Key_info = lists:sublist(Data, Header_length + 1, Data_length),
+	% The notary_header struct occupies 10 bytes; after it is the service id
+	% string, which occupies Name_len bytes.
+	Header_len = Name_len + 10,
+	Data_len   = Total_len - Sig_len - Header_len,
+	
+	% Strips away the notary_header, service id (SID) and signature info.
+	<<_SID:Name_len/bytes, Key_info:Data_len/bytes, _/binary>> = PostHeader,
 	
 	Result = parse_key_info(Key_info),
 	parse_server_result(Rest, [{Address, Result} | ParsedList]).
@@ -38,28 +40,23 @@ parse_key_info(Key_info) ->
 	parse_individual_keys(Key_info, []).
 
 % Each key goes through this once
-parse_individual_keys([], Results) ->
+parse_individual_keys(<<>>, Results) ->
 	Results;
 
 parse_individual_keys(Data, Results) ->
-	Num_timestamps = ((lists:nth(1, Data) bsl 8) bxor lists:nth(2, Data)),
-	Key_len_bytes  = ((lists:nth(3, Data) bsl 8) bxor lists:nth(4, Data)),
-	
 	%% Each key_info occupies:
 	% - 5 bytes for the ssh_key_info struct;
+	%   - num_timestamps: 2 bytes;
+	%   - key_len_bytes:  2 bytes;
+	%   - key_type:       1 byte;
 	% - key_len_bytes bytes for the key itself;
-	% - 2 * 4 (uint32_t) * (number of timestamps) bytes.
-	% + 1 is because of erlang's 1-based indexing
-	Key = lists:sublist(Data, 5 + 1, Key_len_bytes),
+	% - 2 (start/end pair) * 4 * (number of timestamps) bytes.
+	<<Num_timestamps:16, Key_len_bytes:16, _:8, Key_info/binary>> = Data,
+	TLen = (2 * 4 * Num_timestamps),
+	<<Key:Key_len_bytes/bytes, Timestamps:TLen/bytes, Rest/binary>> = Key_info,
 	
-	TimestampsInfo = lists:sublist(Data, 5 + Key_len_bytes + 1,
-													(2 * 4 * Num_timestamps)),
-	ParsedTimestamps = parse_timestamps(TimestampsInfo),
-	
-	Rest_of_Data = lists:nthtail((5 + Key_len_bytes + (2 * 4 * Num_timestamps)),
-								 Data),
-	
-	parse_individual_keys(Rest_of_Data, [{Key, ParsedTimestamps} | Results]).
+	ParsedTimestamps = parse_timestamps(Timestamps),
+	parse_individual_keys(Rest, [{Key, ParsedTimestamps} | Results]).
 
 
 %% Parse individual key stamps
@@ -67,20 +64,10 @@ parse_timestamps(TimestampsInfo) ->
 	parse_individual_timestamps(TimestampsInfo, []).
 
 % Each keystamp goes through this once
-parse_individual_timestamps([], Results) ->
+parse_individual_timestamps(<<>>, Results) ->
 	Results;
 
 parse_individual_timestamps(CurrentTimestampInfo, Results) ->
-	Timestamp_begin = ((lists:nth(1, CurrentTimestampInfo) bsl 24) bxor
-					   (lists:nth(2, CurrentTimestampInfo) bsl 16) bxor
-					   (lists:nth(3, CurrentTimestampInfo) bsl  8) bxor
-					   (lists:nth(4, CurrentTimestampInfo))),
-	Timestamp_end   = ((lists:nth(5, CurrentTimestampInfo) bsl 24) bxor
-					   (lists:nth(6, CurrentTimestampInfo) bsl 16) bxor
-					   (lists:nth(7, CurrentTimestampInfo) bsl  8) bxor
-					   (lists:nth(8, CurrentTimestampInfo))),
+	<<Begin:32, End:32, NewTimestampInfo/binary>> = CurrentTimestampInfo,
 	
-	NewTimestampInfo = lists:nthtail(8, CurrentTimestampInfo),
-	
-	parse_individual_timestamps(NewTimestampInfo,
-								[{Timestamp_begin, Timestamp_end} | Results]).
+	parse_individual_timestamps(NewTimestampInfo, [{Begin, End} | Results]).

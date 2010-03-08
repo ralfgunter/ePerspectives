@@ -8,7 +8,7 @@
 
 -define(DEFAULT_PORT, 12345).
 -define(MAX_PACKET_LEN, 4000).
--define(UDP_OPTIONS, [{active, false}, {reuseaddr, true}]).
+-define(UDP_OPTIONS, [binary, {active, false}, {reuseaddr, true}]).
 -define(TIMEOUT, 8000).
 -define(SIG_LEN, 172).
 
