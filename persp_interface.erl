@@ -7,56 +7,28 @@
 %%% this software.
 
 -module(persp_interface).
--export([start/0, scan_service_id/1, scan/3, print_results/0, 
-		 add_server/3, del_server/1]).
--include("persp_client.hrl").
+-export([start/0]).
+-export([add_server/3, del_server/1]).
+-export([scan/3, scan_service_id/1]).
+-export([print/0]).
+
 
 start() ->
-	case whereis(persp_client) of
-		undefined ->
-			register(persp_client, spawn_link(persp_client, start, []));
-		_defined ->
-			client_already_started
-	end.
+	gen_server:start_link({local, persp_gs}, persp_gs, [], []).
 
-scan_service_id(Service_ID) ->
-	case whereis(persp_client) of
-		undefined ->
-			{error, client_not_started};
-		_defined ->
-			persp_client ! #scan_service_id{service_id = Service_ID}
-	end.
-
-scan(Hostname, Port, Service_Type) ->
-	case whereis(persp_client) of
-		undefined ->
-			{error, client_not_started};
-		_defined ->
-			Service_ID = Hostname ++ ":" ++ integer_to_list(Port) ++ "," ++
-											integer_to_list(Service_Type),
-			persp_client ! #scan_service_id{service_id = Service_ID}
-	end.
-
-print_results() ->
-		case whereis(persp_client) of
-		undefined ->
-			{error, client_not_started};
-		_defined ->
-			persp_client ! #print_results{output_type = stdout}
-	end.
-
-add_server(IP, Port, PubKey) ->
-	case whereis(persp_client) of
-		undefined ->
-			{error, client_not_started};
-		_defined ->
-			persp_client ! #add_server{ip = IP, port = Port, pubkey = PubKey}
-	end.
+add_server(IP, Port, Public_Key) ->
+	gen_server:call(persp_gs, {add_server, IP, Port, Public_Key}).
 
 del_server(IP) ->
-	case whereis(persp_client) of
-		undefined ->
-			{error, client_not_started};
-		_defined ->
-			persp_client ! #del_server{ip = IP}
-	end.
+	gen_server:call(persp_gs, {del_server, IP}).
+
+scan(Hostname, Port, Service_Type) ->
+	Service_ID = Hostname ++ ":" ++ integer_to_list(Port) ++ "," ++
+									integer_to_list(Service_Type),
+	scan_service_id(Service_ID).
+
+scan_service_id(Service_ID) ->
+	gen_server:call(persp_gs, {scan_service_id, Service_ID}).
+
+print() ->
+	gen_server:call(persp_gs, print).

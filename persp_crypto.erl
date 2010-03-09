@@ -31,7 +31,6 @@ verify_rsa_signature(Data, Signature, Public_Key) ->
 % Do not confuse this with public_key:pem_to_der; this takes as argument
 % a string with the key already in it, instead of a File.
 pem_key_to_der(Key) ->
-	% TODO: use a macro here for Windows folks
 	Lines = string:tokens(Key, "\n"),
 	MiddleLines = lists:sublist(Lines, 2, (length(Lines) - 2)),
 	FinalString = string:join(MiddleLines, "\n"),

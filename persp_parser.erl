@@ -20,7 +20,7 @@ parse_server_result([], ParsedList) ->
 parse_server_result([{error, Reason, IP} | Rest], ParsedList) ->
 	parse_server_result(Rest, [{error, Reason, IP} | ParsedList]);
 
-parse_server_result([{{ok, {Address, _Port, Data}}, PKey} | Rest], ParsedList) ->
+parse_server_result([{Address, _Port, PKey, Data} | Rest], ParsedList) ->
 	<<_:16, Total_len:16, _:16, Name_len:16, Sig_len:16, PostHeader/binary>> = Data,
 	
 	% The notary_header struct occupies 10 bytes; after it is the service id
