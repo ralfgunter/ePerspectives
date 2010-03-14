@@ -46,7 +46,7 @@ init([Port, Module]) ->
               },
 			  % Key server (signing-related functions)
 			  {   key_serv,
-			      {key_server, start_link, ["keys/private_key.pem", "keys/public_key.pem"]},
+			      {key_server, start_link, ["../keys/private.pem", "../keys/public.pem"]},
 				  permanent,
 				  brutal_kill,
 				  worker,
@@ -69,8 +69,8 @@ init([Module]) ->
     {ok,
         {_SupFlags = {simple_one_for_one, ?MAX_RESTART, ?MAX_TIME},
             [
-              % TCP Client
-              {   undefined,                               % Id       = internal id
+              % Scanner
+              {   scanner,                                 % Id       = internal id
                   {Module,start_link,[]},                  % StartFun = {M, F, A}
                   temporary,                               % Restart  = permanent | transient | temporary
                   2000,                                    % Shutdown = brutal_kill | int() >= 0 | infinity

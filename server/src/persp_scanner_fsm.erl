@@ -134,8 +134,14 @@ prepare_response({KeyFingerprint, Service_ID}) ->
 	Seconds = calendar:datetime_to_gregorian_seconds(LocalTime) - ?UNIX_EPOCH,
 	
 	Key_info = << 1:16, 16:16, 3:8, KeyFingerprint/binary, Seconds:32, Seconds:32 >>,
-	Sig = << 0:(?SIG_LEN * 8) >>,
-	
 	SIDBin = list_to_binary(Service_ID),
+	Signature = sign(Key_info, SIDBin),
 	
-	<< Header/binary, SIDBin/binary, Key_info/binary, Sig/binary >>.
+	<< Header/binary, SIDBin/binary, Key_info/binary, Signature/binary >>.
+
+
+sign(Key_info, SIDBin) ->
+	Data = << SIDBin/binary, Key_info/binary >>,
+	Signature = gen_server:call(key_server, {sign, Data}),
+	
+	Signature.

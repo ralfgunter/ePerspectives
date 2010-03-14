@@ -1,0 +1,18 @@
+RSA DEFINITIONS IMPLICIT TAGS ::=
+BEGIN
+EXPORTS WrappedKey, RSAPublicKey;
+
+WrappedKey ::= SEQUENCE {
+	seq SEQUENCE {	
+		rsaIdentifier OBJECT IDENTIFIER,
+		null          NULL
+	},
+	publicKey BIT STRING
+}
+
+RSAPublicKey ::= SEQUENCE {
+	modulus        INTEGER,
+	publicExponent INTEGER
+}
+
+END
