@@ -1,5 +1,5 @@
 =ePerspectives
-<b>ePerspectives</b> aims to be a pure-erlang implementation of a Perspectives client, API and Notary server/scanner, though currently only the client is being worked on. Thanks to the concurrency features of erlang, the server/scanner should be able to handle several requests at once without much difficulty.
+<b>ePerspectives</b> aims to be a pure-erlang implementation of a Perspectives client, API and Notary server/scanner. Thanks to the concurrency features of erlang, the server/scanner should be able to handle several requests at once without much difficulty.
 
 =About Perspectives
 <b>Perspectives</b> makes use of a network of "notary servers" around the world to retrieve a given website's SSL certificate from multiple vantage points, so as to diminish the effectivity of a MITM (man-in-the-middle) attack.
@@ -10,7 +10,7 @@ By probing the target website from multiple "perspectives", one diminishes the p
 
 For more information and a paper on Perspectives, please visit the official website at http://www.cs.cmu.edu/~perspectives
 
-=Usage
+=Usage - CLIENT
 
 Note: since this software is very early in development, I cannot guarantee that the API will remain the same.
 
