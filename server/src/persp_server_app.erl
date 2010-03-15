@@ -44,13 +44,13 @@ init([Port, Module]) ->
     {ok,
         {_SupFlags = {one_for_one, ?MAX_RESTART, ?MAX_TIME},
             [
-              % TCP Listener
-              {   udp_listen,                              % Id       = internal id
-                  {udp_listener,start_link,[Port,Module]}, % StartFun = {M, F, A}
-                  permanent,                               % Restart  = permanent | transient | temporary
-                  2000,                                    % Shutdown = brutal_kill | int() >= 0 | infinity
-                  worker,                                  % Type     = worker | supervisor
-                  [udp_listener]                           % Modules  = [Module] | dynamic
+              % UDP Listener
+              {   udp_listen,
+                  {udp_listener,start_link,[Port,Module]},
+                  permanent,
+                  2000,
+                  worker,
+                  [udp_listener]
               },
 			  % Key server (signing-related functions)
 			  {   key_serv,
@@ -62,19 +62,19 @@ init([Port, Module]) ->
 			  },
 			  % DB server (caches the scan results)
 			  {   db_serv,
-			      {db_server, start_link, []},
+			      {db_server_ets, start_link, ["../db/sid_file", "../db/fingerprint_file"]},
 				  permanent,
 				  2000,
 				  worker,
-				  [db_server]
+				  [db_server_ets]
 				  },
-              % Client instance supervisor
+              % Scanner instance supervisor
               {   persp_scanner_sup,
                   {supervisor,start_link,[{local, persp_scanner_sup}, ?MODULE, [Module]]},
-                  permanent,                               % Restart  = permanent | transient | temporary
-                  infinity,                                % Shutdown = brutal_kill | int() >= 0 | infinity
-                  supervisor,                              % Type     = worker | supervisor
-                  []                                       % Modules  = [Module] | dynamic
+                  permanent,
+                  infinity,
+                  supervisor,
+                  []
               }
             ]
         }
@@ -86,12 +86,12 @@ init([Module]) ->
         {_SupFlags = {simple_one_for_one, ?MAX_RESTART, ?MAX_TIME},
             [
               % Scanner
-              {   scanner,                                 % Id       = internal id
-                  {Module,start_link,[]},                  % StartFun = {M, F, A}
-                  temporary,                               % Restart  = permanent | transient | temporary
-                  2000,                                    % Shutdown = brutal_kill | int() >= 0 | infinity
-                  worker,                                  % Type     = worker | supervisor
-                  []                                       % Modules  = [Module] | dynamic
+              {   scanner,
+                  {Module,start_link,[]},
+                  temporary,
+                  2000,
+                  worker,
+                  []
               }
             ]
         }

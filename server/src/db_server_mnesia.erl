@@ -6,7 +6,7 @@
 %%% terms of this license. You must not remove this notice, or any other, from
 %%% this software.
 
--module(db_server).
+-module(db_server_mnesia).
 -behaviour(gen_server).
 
 %% External API

@@ -25,7 +25,6 @@
 -export(['SCAN'/2]).
 
 -record(scan_data, {socket, address, port, data}).
--record(scan_cache, {service_id, fingerprint, timestamp_beg, timestamp_end}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -37,22 +36,20 @@ start_link() ->
 
 scan(ScanData) ->
 	[Domain, Port, Service_type] = parse_scan_data(ScanData),
-	% This is starting to get repetitive...
+	
 	Service_ID = Domain ++ ":" ++ Port ++ "," ++ Service_type,
+	IntegerPort = list_to_integer(Port),
 	
 	case check_cache(Service_ID) of
 		[] ->
-			{ok, Fingerprint, _} = new_scan(Domain, list_to_integer(Port),
-											Service_type),
+			{ok, Fingerprint} = new_scan(Domain, IntegerPort, Service_type),
 			Timestamp = time_now(),
 			add_entry(Service_ID, Fingerprint, Timestamp),
-			Result = #scan_cache{service_id    = Service_ID,
-								 fingerprint   = Fingerprint,
-								 timestamp_beg = Timestamp,
-								 timestamp_end = Timestamp},
-			{ok, [Result]};
+			Result = {Fingerprint, [[Timestamp, Timestamp]]},
+			
+			{ok, Service_ID, [Result]};
 		Results ->
-			{ok, Results}
+			{ok, Service_ID, Results}
 	end.
 
 start_scan(Pid, ScanData) when is_pid(Pid) ->
@@ -102,8 +99,8 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 'SCAN'({start_scan, ScanData}, State) ->
 	case scan(ScanData) of
-		{ok, Results} ->
-			BinResponse = prepare_response(Results),
+		{ok, Service_ID, Results} ->
+			BinResponse = prepare_response(Service_ID, Results),
 			send_results(ScanData, BinResponse);
 		{error, Reason} ->
 			error_logger:error_msg("Scan failed: ~p\n", [Reason])
@@ -116,6 +113,9 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %% Internal API
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Parsing
 parse_scan_data(ScanData) ->
 	Data = ScanData#scan_data.data,
 	
@@ -130,14 +130,13 @@ parse_sid_bin(SIDBin, _Name_len) ->
 	
 	ParsedSID.
 
-
-prepare_response(List) ->
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Preparing the response to a scan request
+prepare_response(Service_ID, List) ->
 	Num_entries = length(List),
-	% TODO: bad hack?
-	#scan_cache{service_id = Service_ID} = lists:nth(1, List),
-	
-	prepare_response(Service_ID, List, <<Num_entries:16, 16:16, 3:8>>).
+	prepare_response(Service_ID, List, << Num_entries:16, 16:16, 3:8 >>).
 
+% This is called when we're done parsing all {fingerprint, timestamps} entries
 prepare_response(Service_ID, [], Key_info) ->
 	Name_len  = length(Service_ID),
 	Total_len = 10 + Name_len + byte_size(Key_info) + ?SIG_LEN,
@@ -150,31 +149,56 @@ prepare_response(Service_ID, [], Key_info) ->
 	
 	<< Header/binary, SIDBin/binary, Key_info/binary, Signature/binary >>;
 
+% This is called once per fingerprint
 prepare_response(Service_ID, [CurrentEntry | Rest], Results) ->
-	#scan_cache{fingerprint = Fingerprint,
-				timestamp_beg = Timestamp_beg,
-				timestamp_end = Timestamp_end} = CurrentEntry,
-	Data = << Fingerprint/binary, Timestamp_beg:32, Timestamp_end:32 >>,
+	{Fingerprint, Timestamps} = CurrentEntry,
+	
+	BinTimestamps = prepare_timestamps(Timestamps),
+	Data = << Fingerprint/binary, BinTimestamps/binary >>,
 	
 	prepare_response(Service_ID, Rest, << Results/binary, Data/binary >>).
 
+prepare_timestamps(Timestamps) ->
+	prepare_timestamps(Timestamps, <<>>).
 
+% This is called once we're done parsing timestamps
+prepare_timestamps([], Results) ->
+	Results;
+
+% This is called once per timestamp
+prepare_timestamps([CurrentPair | Rest], Results) ->
+	[Timestamp_beg, Timestamp_end] = CurrentPair,
+	
+	NewResults = << Results/binary, Timestamp_beg:32, Timestamp_end:32 >>,
+	
+	prepare_timestamps(Rest, NewResults).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Database access
+check_cache(Service_ID) ->
+	gen_server:call(db_server_ets, {check_cache, Service_ID}).
+
+add_entry(Service_ID, Fingerprint, Timestamp) ->
+	gen_server:call(db_server_ets, {add_entry, Service_ID, Fingerprint, Timestamp}).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Misc
 sign(Key_info, SIDBin) ->
 	Data = << SIDBin/binary, Key_info/binary >>,
 	Signature = gen_server:call(key_server, {sign, Data}),
 	
 	Signature.
 
-new_scan(Domain, Port, Service_type) ->
+% Service_type shall soon be unnecessary
+new_scan(Domain, Port, _Service_type) ->
 	case ssl:connect(Domain, Port, ?SOCKET_OPTS) of
 		{ok, Socket} ->
 			{ok, Cert} = ssl:peercert(Socket),
 			KeyFingerprint = crypto:md5(Cert),
-			Service_ID = Domain ++ ":" ++ integer_to_list(Port) ++ "," ++ Service_type,
-			
+
 			ssl:close(Socket),
 			
-			{ok, KeyFingerprint, Service_ID};
+			{ok, KeyFingerprint};
 		{error, Reason} ->
 			error_logger:error_msg("Failed to connect to ~p:~p - ~p\n",
 									[Domain, Port, Reason]),
@@ -186,9 +210,3 @@ time_now() ->
 	Seconds = calendar:datetime_to_gregorian_seconds(LocalTime) - ?UNIX_EPOCH,
 	
 	Seconds.
-
-check_cache(Service_ID) ->
-	gen_server:call(db_server, {check_cache, Service_ID}).
-
-add_entry(Service_ID, Fingerprint, Timestamp) ->
-	gen_server:call(db_server, {add_entry, Service_ID, Fingerprint, Timestamp}).
