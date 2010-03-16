@@ -14,7 +14,7 @@
 -define(SCAN_TIMEOUT, 5000).
 -define(SOCKET_OPTS, [binary, {reuseaddr, true}, {active, false}]).
 
--export([start_link/0, start_scan/2]).
+-export([start_link/0, start_scan/2, rescan_all/0]).
 
 %% gen_fsm callbacks
 -export([init/1, terminate/3]).
@@ -28,45 +28,21 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
-%% persp_scanner callbacks
+%% External API
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link() ->
 	gen_fsm:start_link(?MODULE, [], []).
 
-scan(ScanData) ->
-	[Domain, Port, Service_type] = parse_scan_data(ScanData),
-	
-	Service_ID = Domain ++ ":" ++ Port ++ "," ++ Service_type,
-	IntegerPort = list_to_integer(Port),
-	
-	case check_cache(Service_ID) of
-		[] ->
-			{ok, Fingerprint} = new_scan(Domain, IntegerPort, Service_type),
-			Timestamp = time_now(),
-			add_entry(Service_ID, Fingerprint, Timestamp),
-			Result = {Fingerprint, [[Timestamp, Timestamp]]},
-			
-			{ok, Service_ID, [Result]};
-		Results ->
-			{ok, Service_ID, Results}
-	end.
-
 start_scan(Pid, ScanData) when is_pid(Pid) ->
 	gen_fsm:send_event(Pid, {start_scan, ScanData}).
 
-send_results(ScanData, Results) ->
-	ClientSocket  = ScanData#scan_data.socket,
-	ClientAddress = ScanData#scan_data.address,
-	ClientPort    = ScanData#scan_data.port,
-	
-	case gen_udp:send(ClientSocket, ClientAddress, ClientPort, Results) of
-		ok ->
-			ok;
-		{error, Reason} ->
-			error_logger:error_msg("Failed to send results: ~p\n", [Reason])
-	end.
+rescan(Pid, Service_ID, Domain, Port) when is_pid(Pid) ->
+	gen_fsm:send_event(Pid, {rescan, Service_ID, Domain, Port}).
 
+rescan_all() ->
+	SIDList = get_sid_list(),
+	scan_list(SIDList).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -105,6 +81,10 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 		{error, Reason} ->
 			error_logger:error_msg("Scan failed: ~p\n", [Reason])
 	end,
+	{stop, normal, State};
+
+'SCAN'({rescan, Service_ID, Domain, Port}, State) ->
+	rescan_entry(Service_ID, Domain, Port),
 	{stop, normal, State}.
 
 
@@ -122,7 +102,6 @@ parse_scan_data(ScanData) ->
 	<<_:48, Name_len:16, _:16, SIDBin/binary>> = Data,
 	
 	parse_sid_bin(SIDBin, Name_len).
-
 
 parse_sid_bin(SIDBin, _Name_len) ->
 	SIDList = binary_to_list(SIDBin),
@@ -181,21 +160,50 @@ check_cache(Service_ID) ->
 add_entry(Service_ID, Fingerprint, Timestamp) ->
 	gen_server:call(db_server_ets, {add_entry, Service_ID, Fingerprint, Timestamp}).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Misc
-sign(Key_info, SIDBin) ->
-	Data = << SIDBin/binary, Key_info/binary >>,
-	Signature = gen_server:call(key_server, {sign, Data}),
-	
-	Signature.
+update_entry(Fingerprint, NewTimestamp) ->
+	gen_server:call(db_server_ets, {update_entry, Fingerprint, NewTimestamp}).
 
-% Service_type shall soon be unnecessary
-new_scan(Domain, Port, _Service_type) ->
+get_sid_list() ->
+	gen_server:call(db_server_ets, {list_all_sids}).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Scanning
+scan(ScanData) ->
+	[Domain, Port, Service_type] = parse_scan_data(ScanData),
+	scan(Domain, Port, Service_type).
+
+scan(Domain, Port, Service_type) ->
+	Service_ID = Domain ++ ":" ++ Port ++ "," ++ Service_type,
+	IntegerPort = list_to_integer(Port),
+	
+	case check_cache(Service_ID) of
+		[] ->
+			Result = new_scan(Service_ID, Domain, IntegerPort),
+			
+			{ok, Service_ID, [Result]};
+		Results ->
+			{ok, Service_ID, Results}
+	end.
+
+new_scan(Service_ID, Domain, Port) ->
+	{ok, Fingerprint} = get_fingerprint(Domain, Port),
+	Timestamp = time_now(),
+	add_entry(Service_ID, Fingerprint, Timestamp),
+	Result = {Fingerprint, [[Timestamp, Timestamp]]},
+	
+	Result.
+
+rescan_entry(_Service_ID, Domain, Port) ->
+	{ok, Fingerprint} = get_fingerprint(Domain, Port),
+	Timestamp = time_now(),
+	update_entry(Fingerprint, Timestamp).
+
+get_fingerprint(Domain, Port) ->
 	case ssl:connect(Domain, Port, ?SOCKET_OPTS) of
 		{ok, Socket} ->
 			{ok, Cert} = ssl:peercert(Socket),
 			KeyFingerprint = crypto:md5(Cert),
-
+			
 			ssl:close(Socket),
 			
 			{ok, KeyFingerprint};
@@ -205,8 +213,40 @@ new_scan(Domain, Port, _Service_type) ->
 			{error, Reason}
 	end.
 
+% This spawns a new scanner for each element in the list
+% TODO: there should be a way to control how many of these go off simultaneously
+scan_list([]) ->
+	ok;
+
+scan_list([[CurrentSID] | Rest]) ->
+	{ok, Pid} = persp_server_app:start_scanner(),
+	[Domain, Port, _Service_type] = string:tokens(CurrentSID, ":,"),
+	IntPort = list_to_integer(Port),
+	rescan(Pid, CurrentSID, Domain, IntPort),
+	scan_list(Rest).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Misc
+sign(Key_info, SIDBin) ->
+	Data = << SIDBin/binary, Key_info/binary >>,
+	Signature = gen_server:call(key_server, {sign, Data}),
+	
+	Signature.
+
 time_now() ->
 	LocalTime = erlang:localtime(),
 	Seconds = calendar:datetime_to_gregorian_seconds(LocalTime) - ?UNIX_EPOCH,
 	
 	Seconds.
+
+send_results(ScanData, Results) ->
+	ClientSocket  = ScanData#scan_data.socket,
+	ClientAddress = ScanData#scan_data.address,
+	ClientPort    = ScanData#scan_data.port,
+	
+	case gen_udp:send(ClientSocket, ClientAddress, ClientPort, Results) of
+		ok ->
+			ok;
+		{error, Reason} ->
+			error_logger:error_msg("Failed to send results: ~p\n", [Reason])
+	end.

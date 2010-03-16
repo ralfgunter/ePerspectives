@@ -56,7 +56,7 @@ loop(Socket, Module) ->
 			Module:start_scan(Pid, ScanData),
 			loop(Socket, Module);
 		{error, Reason} ->
-			error_logger:error_msg("Error receiving data: ~p.\n", [Reason]),
+			error_logger:error_msg("Error receiving data: ~p\n", [Reason]),
 			loop(Socket, Module)
 	end.
 

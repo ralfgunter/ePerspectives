@@ -68,6 +68,14 @@ handle_call({add_entry, Service_ID, Fingerprint, Timestamp}, _From, Files) ->
 	add_entry(Service_ID, Fingerprint, Timestamp),
 	{reply, ok, Files};
 
+handle_call({update_entry, Fingerprint, NewTimestamp}, _From, Files) ->
+	update_entry(Fingerprint, NewTimestamp),
+	{reply, ok, Files};
+
+handle_call({list_all_sids}, _From, Files) ->
+	List = list_all_sids(),
+	{reply, List, Files};
+
 handle_call(Request, _From, Files) ->
     {stop, {unknown_call, Request}, Files}.
 
@@ -84,6 +92,13 @@ add_entry(Service_ID, Fingerprint, Timestamp) ->
 	ets:insert(sid_table, {Service_ID, Fingerprint}),
 	ets:insert(fingerprint_table, {Fingerprint, Timestamp, Timestamp}).
 
+update_entry(Fingerprint, NewTimestampEnd) ->
+	List = ets:match(fingerprint_table, {Fingerprint, '$1', '$2'}),
+	[Beg, OldEnd] = lists:last(List),
+	
+	ets:delete_object(fingerprint_table, {Fingerprint, Beg, OldEnd}),
+	ets:insert(fingerprint_table, {Fingerprint, Beg, NewTimestampEnd}).
+
 check_cache(Service_ID) ->
 	case ets:member(sid_table, Service_ID) of
 		true ->
@@ -95,6 +110,9 @@ check_cache(Service_ID) ->
 		false ->
 			[]
 	end.
+
+list_all_sids() ->
+	ets:match(sid_table, {'$1', _ = '_'}).
 
 %% Query processing
 check_service_id(Service_ID) ->

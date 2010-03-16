@@ -19,6 +19,9 @@
 -define(MAX_TIME,       60).
 -define(DEF_PORT,    15217).
 
+% Rescans all database entries every 24 hours
+-define(DEF_RESCAN_PERIOD, (24 * 3600 * 1000)).
+
 %% A startup function for spawning a new scanner FSM.
 %% To be called by the UDP listener process.
 start_scanner() ->
@@ -67,7 +70,15 @@ init([Port, Module]) ->
 				  2000,
 				  worker,
 				  [db_server_ets]
-				  },
+			  },
+			  % Server that requests rescans
+			  {   rescan_serv,
+			      {rescan_server, start_link, [?DEF_RESCAN_PERIOD, [Module]]},
+				  permanent,
+				  2000,
+				  worker,
+				  [rescan_server]
+			  },
               % Scanner instance supervisor
               {   persp_scanner_sup,
                   {supervisor,start_link,[{local, persp_scanner_sup}, ?MODULE, [Module]]},
