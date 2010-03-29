@@ -38,9 +38,9 @@ start_link(Port, Module) when is_integer(Port), is_atom(Module) ->
 %%%------------------------------------------------------------------------
 
 init({Port, Module}) ->
-	process_flag(trap_exit, true),
 	case gen_udp:open(Port, ?UDP_OPTIONS) of
 		{ok, Socket} ->
+			process_flag(trap_exit, true),
 			proc_lib:init_ack({ok, self()}),
 			loop(Socket, Module);
 		{error, Reason} ->

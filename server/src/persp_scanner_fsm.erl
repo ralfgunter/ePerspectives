@@ -155,16 +155,16 @@ prepare_timestamps([CurrentPair | Rest], Results) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database access
 check_cache(Service_ID) ->
-	gen_server:call(db_server_ets, {check_cache, Service_ID}).
+	gen_server:call(db_server_dets, {check_cache, Service_ID}).
 
 add_entry(Service_ID, Fingerprint, Timestamp) ->
-	gen_server:call(db_server_ets, {add_entry, Service_ID, Fingerprint, Timestamp}).
+	gen_server:call(db_server_dets, {add_entry, Service_ID, Fingerprint, Timestamp}).
 
 update_entry(Fingerprint, NewTimestamp) ->
-	gen_server:call(db_server_ets, {update_entry, Fingerprint, NewTimestamp}).
+	gen_server:call(db_server_dets, {update_entry, Fingerprint, NewTimestamp}).
 
 get_sid_list() ->
-	gen_server:call(db_server_ets, {list_all_sids}).
+	gen_server:call(db_server_dets, {list_all_sids}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Scanning

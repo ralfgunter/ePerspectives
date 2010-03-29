@@ -65,11 +65,11 @@ init([Port, Module]) ->
 			  },
 			  % DB server (caches the scan results)
 			  {   db_serv,
-			      {db_server_ets, start_link, ["../db/sid_file", "../db/fingerprint_file"]},
+			      {db_server_dets, start_link, ["../db/sid_file", "../db/fingerprint_file"]},
 				  permanent,
 				  2000,
 				  worker,
-				  [db_server_ets]
+				  [db_server_dets]
 			  },
 			  % Server that requests rescans
 			  {   rescan_serv,
