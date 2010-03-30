@@ -52,7 +52,7 @@ loop(Socket, Module) ->
 		{ok, {Address, Port, Data}} ->
 			ScanData = #scan_data{socket = Socket, address = Address,
 								  port = Port, data = Data},
-			{ok, Pid} = persp_server_app:start_scanner(),
+			{ok, Pid} = persp_scanner_sup:get_scanner(),
 			Module:start_scan(Pid, ScanData),
 			loop(Socket, Module);
 		{error, Reason} ->

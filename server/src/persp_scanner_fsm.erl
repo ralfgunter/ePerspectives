@@ -62,6 +62,12 @@ handle_event(Event, StateName, StateData) ->
 	{stop, {StateName, undefined_event, Event}, StateData}.
 
 terminate(_Reason, _StateName, _State) ->
+	% TODO: Do away with this.
+	% There should be no need for a scanner to explicitly (in contrast to the
+	% regular erlang methods) inform the supervisor that it has terminated.
+	% This is probably inefficient in a large scale and ties the implementation
+	% of the child with the supervisor's.
+	persp_scanner_sup:child_terminated(self()),
 	ok.
 
 code_change(_OldVsn, StateName, StateData, _Extra) ->
@@ -219,7 +225,7 @@ scan_list([]) ->
 	ok;
 
 scan_list([[CurrentSID] | Rest]) ->
-	{ok, Pid} = persp_server_app:start_scanner(),
+	{ok, Pid} = persp_scanner_sup:get_scanner(),
 	[Domain, Port, _Service_type] = string:tokens(CurrentSID, ":,"),
 	IntPort = list_to_integer(Port),
 	rescan(Pid, CurrentSID, Domain, IntPort),

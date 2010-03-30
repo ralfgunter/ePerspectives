@@ -9,9 +9,6 @@
 -module(persp_server_app).
 -behaviour(application).
 
-%% Internal API
--export([start_scanner/0]).
-
 %% Application and Supervisor callbacks
 -export([start/2, stop/1, init/1]).
 
@@ -22,14 +19,12 @@
 % Rescans all database entries every 24 hours
 -define(DEF_RESCAN_PERIOD, (24 * 3600 * 1000)).
 
-%% A startup function for spawning a new scanner FSM.
-%% To be called by the UDP listener process.
-start_scanner() ->
-	supervisor:start_child(persp_scanner_sup, []).
 
-%%----------------------------------------------------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
 %% Application behaviour callbacks
-%%----------------------------------------------------------------------
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start(_Type, _Args) ->
 	crypto:start(),
 	ssl:start(),
@@ -39,17 +34,19 @@ start(_Type, _Args) ->
 stop(_S) ->
 	ok.
 
-%%----------------------------------------------------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
 %% Supervisor behaviour callbacks
-%%----------------------------------------------------------------------
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-init([Port, Module]) ->
+init([Port, ScannerModule]) ->
     {ok,
         {_SupFlags = {one_for_one, ?MAX_RESTART, ?MAX_TIME},
             [
               % UDP Listener
               {   udp_listen,
-                  {udp_listener,start_link,[Port,Module]},
+                  {udp_listener, start_link, [Port, ScannerModule]},
                   permanent,
                   2000,
                   worker,
@@ -73,15 +70,15 @@ init([Port, Module]) ->
 			  },
 			  % Server that requests rescans
 			  {   rescan_serv,
-			      {rescan_server, start_link, [?DEF_RESCAN_PERIOD, [Module]]},
+			      {rescan_server, start_link, [?DEF_RESCAN_PERIOD, [ScannerModule]]},
 				  permanent,
 				  2000,
 				  worker,
 				  [rescan_server]
 			  },
               % Scanner instance supervisor
-              {   persp_scanner_sup,
-                  {supervisor,start_link,[{local, persp_scanner_sup}, ?MODULE, [Module]]},
+              {   scanner_sup,
+                  {persp_scanner_sup, start_link, [ScannerModule, prefork, 5]},
                   permanent,
                   infinity,
                   supervisor,
@@ -89,29 +86,13 @@ init([Port, Module]) ->
               }
             ]
         }
-    };
-
-
-init([Module]) ->
-    {ok,
-        {_SupFlags = {simple_one_for_one, ?MAX_RESTART, ?MAX_TIME},
-            [
-              % Scanner
-              {   scanner,
-                  {Module,start_link,[]},
-                  temporary,
-                  2000,
-                  worker,
-                  []
-              }
-            ]
-        }
     }.
 
-
-%%----------------------------------------------------------------------
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
 %% Internal functions
-%%----------------------------------------------------------------------
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 get_app_env(Opt, Default) ->
 	case application:get_env(application:get_application(), Opt) of
 		{ok, Val} ->
