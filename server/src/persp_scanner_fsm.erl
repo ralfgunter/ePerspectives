@@ -235,9 +235,19 @@ scan_list([[CurrentSID] | Rest]) ->
 %% Misc
 sign(Key_info, SIDBin) ->
 	Data = << SIDBin/binary, Key_info/binary >>,
-	Signature = gen_server:call(key_server, {sign, Data}),
+	Signature = sign_data(Data),
 	
 	Signature.
+
+sign_data(Data) ->
+	%gen_server:call(key_server, {sign, Data}).
+	
+	{ok, Pid} = key_sup:get_signer(),
+	key_signer:start_to_sign(Pid, Data, self()),
+	receive
+		{ok, SignedData} ->
+			SignedData
+	end.
 
 time_now() ->
 	LocalTime = erlang:localtime(),

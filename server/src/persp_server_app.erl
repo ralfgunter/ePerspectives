@@ -52,13 +52,13 @@ init([Port, ScannerModule]) ->
                   worker,
                   [udp_listener]
               },
-			  % Key server (signing-related functions)
+			  % Key signing supervisor
 			  {   key_serv,
-			      {key_server, start_link, ["../keys/private.pem", "../keys/public.pem"]},
+			      {key_sup, start_link, ["../keys/private.pem", prefork, 1000]},
 				  permanent,
-				  brutal_kill,
-				  worker,
-				  [key_server]
+				  infinity,
+				  supervisor,
+				  []
 			  },
 			  % DB server (caches the scan results)
 			  {   db_serv,
@@ -78,7 +78,7 @@ init([Port, ScannerModule]) ->
 			  },
               % Scanner instance supervisor
               {   scanner_sup,
-                  {persp_scanner_sup, start_link, [ScannerModule, prefork, 5]},
+                  {persp_scanner_sup, start_link, [ScannerModule, prefork, 1000]},
                   permanent,
                   infinity,
                   supervisor,
