@@ -15,3 +15,8 @@ client:
 
 server:
 	@$(MAKE) -C server
+
+clean:
+	@$(MAKE) -C common clean
+	@$(MAKE) -C client clean
+	@$(MAKE) -C server clean

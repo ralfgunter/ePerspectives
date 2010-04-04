@@ -10,4 +10,4 @@ ebin/%.beam: src/%.erl
 	erlc -o `dirname $@` $<
 
 clean:
-	rm -rf ebin/*
+	rm -rf ebin/*.beam
