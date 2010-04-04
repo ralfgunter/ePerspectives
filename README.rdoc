@@ -10,6 +10,10 @@ By probing the target website from multiple "perspectives", one diminishes the p
 
 For more information and a paper on Perspectives, please visit the official website at http://www.cs.cmu.edu/~perspectives
 
+=Compiling
+
+Calling <b>make</b> without arguments will compile the entire suite (client + server/scanner). If you need only one component, you can pass <i>client</i> or <i>server</i> to <b>make</b>.
+
 =Usage - CLIENT
 
 Note: since this software is very early in development, I cannot guarantee that the API will remain the same.
@@ -18,7 +22,7 @@ User interaction is done through the <b>persp_interface</b> module:
 * Function_name/Arity - [Arguments]: Description
 * start/0 - []: spawns a "blank" persp_client instance, and is required before any of the other functions below;
 * scan_service_id/1 - ["DOMAIN:PORT,TYPE"]: requests a scan from the notary servers; currently, TYPE can only be 2 (it means https);
-* scan/3 - [Domain, Port, Type]: same as above;
+* scan/3 - [Domain, Port, Type]: same as above (Domain is a string; port and type are integers);
 * print/0 - []: prints the scan results that have already been received;
 * add_server/3 - [IP, Port, Public_Key]: adds a notary server to the servers list;
 * del_server/1 - [IP]: deletes a notary server from the servers list
@@ -27,7 +31,27 @@ User interaction is done through the <b>persp_interface</b> module:
 
 Note: The same note above applies here.
 
-After the installation, you can start the server/scanner from the <b>server/ebin</b> folder as follows:
+After compiling, make sure all necessary folders/files are in place:
+
+ server/keys/ - holds the private/public key
+   \_ private.pem
+               - default private key file;
+               - must be in the PEM format.
+   \_ public.pem 
+               - default public key file;
+               - must be in the PEM format.
+ 
+ server/db/ - holds the cached results
+   \_ sid_file
+               - default storage for the sids table;
+               - subject to change;
+               - for now, automatically created only by dets.
+   \_ fingerprint_file
+               - default storage for the fingerprints table;
+               - subject to change;
+               - for now, automatically created only by dets.
+
+If so, you can start the server/scanner from the <b>server/ebin</b> folder as follows:
 
  % erl
  Erlang R13B04 (erts-5.7.5) [source] [smp:2:2] [rq:2] [async-threads:0] [hipe] [kernel-poll:false]
@@ -35,9 +59,16 @@ After the installation, you can start the server/scanner from the <b>server/ebin
  Eshell V5.7.5  (abort with ^G)
  1> application:start(persp_server).
  ok
- 2> 
 
-If you want more information, it is recommended that you start the eshell with the flag <b>-boot start_sasl</b>, though that might slow down things. Finally, the shell command <b>appmon:start()<\b> gives you a nice visual overview how things are running (click on persp_server to see more).
+To (somewhat) cleanly stop the server, use the following command:
+
+ application:stop(persp_server).
+
+If you want more information, it is recommended that you start the eshell with the command line argument <b>-boot start_sasl</b>, though that might slow down things. Finally, the shell command <b>appmon:start()</b> gives you a nice visual overview of how things are running (when on it, click on persp_server to see more).
+
+=Compatibility
+
+ePerspectives has been tested on Ubuntu 9.10, running Erlang/OTP R13B04.
 
 =License
 
