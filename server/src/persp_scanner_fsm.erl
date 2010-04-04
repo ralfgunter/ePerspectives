@@ -26,6 +26,7 @@
 
 -record(scan_data, {socket, address, port, data}).
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
 %% External API
@@ -152,7 +153,7 @@ prepare_timestamps([], Results) ->
 
 % This is called once per timestamp
 prepare_timestamps([CurrentPair | Rest], Results) ->
-	[Timestamp_beg, Timestamp_end] = CurrentPair,
+	{Timestamp_beg, Timestamp_end} = CurrentPair,
 	
 	NewResults = << Results/binary, Timestamp_beg:32, Timestamp_end:32 >>,
 	
@@ -161,16 +162,16 @@ prepare_timestamps([CurrentPair | Rest], Results) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database access
 check_cache(Service_ID) ->
-	gen_server:call(db_server_dets, {check_cache, Service_ID}).
-
-add_entry(Service_ID, Fingerprint, Timestamp) ->
-	gen_server:call(db_server_dets, {add_entry, Service_ID, Fingerprint, Timestamp}).
-
-update_entry(Fingerprint, NewTimestamp) ->
-	gen_server:call(db_server_dets, {update_entry, Fingerprint, NewTimestamp}).
+	gen_server:call(db_serv, {check_cache, Service_ID}).
 
 get_sid_list() ->
-	gen_server:call(db_server_dets, {list_all_sids}).
+	gen_server:call(db_serv, {list_all_sids}).
+
+add_entry(Service_ID, Fingerprint, Timestamp) ->
+	gen_server:cast(db_serv, {add_entry, Service_ID, Fingerprint, Timestamp}).
+
+update_entry(Fingerprint, NewTimestamp) ->
+	gen_server:cast(db_serv, {update_entry, Fingerprint, NewTimestamp}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Scanning
@@ -195,9 +196,8 @@ new_scan(Service_ID, Domain, Port) ->
 	{ok, Fingerprint} = get_fingerprint(Domain, Port),
 	Timestamp = time_now(),
 	add_entry(Service_ID, Fingerprint, Timestamp),
-	Result = {Fingerprint, [[Timestamp, Timestamp]]},
 	
-	Result.
+	{Fingerprint, [{Timestamp, Timestamp}]}.
 
 rescan_entry(_Service_ID, Domain, Port) ->
 	{ok, Fingerprint} = get_fingerprint(Domain, Port),

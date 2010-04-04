@@ -19,6 +19,8 @@
 % Rescans all database entries every 24 hours
 -define(DEF_RESCAN_PERIOD, (24 * 3600 * 1000)).
 
+-define(DEF_CHILDREN, 5).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -54,7 +56,7 @@ init([Port, ScannerModule]) ->
               },
 			  % Key signing supervisor
 			  {   key_serv,
-			      {key_sup, start_link, ["../keys/private.pem", prefork, 1000]},
+			      {key_sup, start_link, ["../keys/private.pem", prefork, ?DEF_CHILDREN]},
 				  permanent,
 				  infinity,
 				  supervisor,
@@ -78,7 +80,7 @@ init([Port, ScannerModule]) ->
 			  },
               % Scanner instance supervisor
               {   scanner_sup,
-                  {persp_scanner_sup, start_link, [ScannerModule, prefork, 1000]},
+                  {persp_scanner_sup, start_link, [ScannerModule, prefork, ?DEF_CHILDREN]},
                   permanent,
                   infinity,
                   supervisor,

@@ -20,6 +20,7 @@
 %% Records
 -record(db_files, {sid_file, fingerprint_file}).
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
 %% gen_server callbacks

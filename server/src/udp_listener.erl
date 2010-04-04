@@ -60,7 +60,7 @@ loop(Socket, Module) ->
 			loop(Socket, Module)
 	end.
 
-
+% TODO: this will never be executed - fix it
 terminate(_Reason, State) ->
 	gen_udp:close(State#state.socket),
 	ok.

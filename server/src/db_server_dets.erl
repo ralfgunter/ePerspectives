@@ -24,7 +24,7 @@
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link(Sid_table_file, Fingerprint_table_file) ->
-	gen_server:start_link({local, ?MODULE}, ?MODULE, 
+	gen_server:start_link({local, db_serv}, ?MODULE, 
 							[Sid_table_file, Fingerprint_table_file], []).
 
 init([Sid_file, Fingerprint_file]) ->
@@ -33,16 +33,30 @@ init([Sid_file, Fingerprint_file]) ->
 	{ok, {}}.
 
 terminate(_Reason, _State) ->
-	dets:close(sid_table),
-	dets:close(fingerprint_table).
+	dets:close(sids),
+	dets:close(fingerprints).
 
 code_change(_OldVersion, State, _Extra) ->
 	{ok, State}.
 
-handle_cast(_Msg, State) ->
+handle_info(_Info, State) ->
     {noreply, State}.
 
-handle_info(_Info, State) ->
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% Cast handling (asynchronous commands)
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+handle_cast({add_entry, Service_ID, Fingerprint, Timestamp}, Files) ->
+	add_entry(Service_ID, Fingerprint, Timestamp),
+	{noreply, ok, Files};
+
+handle_cast({update_entry, Fingerprint, NewTimestamp}, Files) ->
+	update_entry(Fingerprint, NewTimestamp),
+	{noreply, ok, Files};
+
+handle_cast(_Msg, State) ->
     {noreply, State}.
 
 
@@ -54,14 +68,6 @@ handle_info(_Info, State) ->
 handle_call({check_cache, Service_ID}, _From, Files) ->
 	Cache = check_cache(Service_ID),
 	{reply, Cache, Files};
-
-handle_call({add_entry, Service_ID, Fingerprint, Timestamp}, _From, Files) ->
-	add_entry(Service_ID, Fingerprint, Timestamp),
-	{reply, ok, Files};
-
-handle_call({update_entry, Fingerprint, NewTimestamp}, _From, Files) ->
-	update_entry(Fingerprint, NewTimestamp),
-	{reply, ok, Files};
 
 handle_call({list_all_sids}, _From, Files) ->
 	List = list_all_sids(),
@@ -80,18 +86,17 @@ handle_call(Request, _From, Files) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Queries
 add_entry(Service_ID, Fingerprint, Timestamp) ->
-	dets:insert(sid_table, {Service_ID, Fingerprint}),
-	dets:insert(fingerprint_table, {Fingerprint, Timestamp, Timestamp}).
+	dets:insert(sids, {Service_ID, Fingerprint}),
+	dets:insert(fingerprints, {Fingerprint, [{Timestamp, Timestamp}]}).
 
-update_entry(Fingerprint, NewTimestampEnd) ->
-	List = dets:match(fingerprint_table, {Fingerprint, '$1', '$2'}),
-	[Beg, OldEnd] = lists:last(List),
+update_entry(Fingerprint, NewEnd) ->
+	[[Timestamps]] = dets:match(fingerprints, {Fingerprint, '$1'}),
+	[{Beg, _OldEnd} | Rest] = Timestamps,
 	
-	dets:delete_object(fingerprint_table, {Fingerprint, Beg, OldEnd}),
-	dets:insert(fingerprint_table, {Fingerprint, Beg, NewTimestampEnd}).
+	dets:update_element(fingerprints, Fingerprint, {2, [{Beg, NewEnd} | Rest]}).
 
 check_cache(Service_ID) ->
-	case dets:member(sid_table, Service_ID) of
+	case dets:member(sids, Service_ID) of
 		true ->
 			Fingerprints_list = check_service_id(Service_ID),
 			Timestamps_list   = check_fingerprints(Fingerprints_list),
@@ -103,12 +108,12 @@ check_cache(Service_ID) ->
 	end.
 
 list_all_sids() ->
-	dets:match(sid_table, {'$1', _ = '_'}).
+	dets:match(sids, {'$1', _ = '_'}).
 
 %% Query processing
 check_service_id(Service_ID) ->
-	TempList = dets:match(sid_table, {Service_ID, '$1'}),
-	Result  = lists:flatten(TempList),
+	TempList = dets:match(sids, {Service_ID, '$1'}),
+	Result  = lists:append(TempList),
 	
 	Result.
 
@@ -119,11 +124,11 @@ check_fingerprints([], Results) ->
 	Results;
 
 check_fingerprints([CurrentFingerprint | Rest], ResultsSoFar) ->
-	Timestamps = dets:match(fingerprint_table,{CurrentFingerprint, '$1', '$2'}),
+	[[Timestamps]] = dets:match(fingerprints, {CurrentFingerprint, '$1'}),
 	check_fingerprints(Rest, [Timestamps | ResultsSoFar]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database initialization and loading
 load_db_files([Sid_filename, Fingerprint_filename]) ->
-	dets:open_file(sid_table, [{type, bag}, {file, Sid_filename}]),
-	dets:open_file(fingerprint_table,[{type, bag},{file,Fingerprint_filename}]).
+	dets:open_file(sids, [{type, bag}, {file, Sid_filename}]),
+	dets:open_file(fingerprints, [{file, Fingerprint_filename}]).
