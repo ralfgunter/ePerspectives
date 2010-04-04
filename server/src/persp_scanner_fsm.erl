@@ -162,16 +162,20 @@ prepare_timestamps([CurrentPair | Rest], Results) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database access
 check_cache(Service_ID) ->
-	gen_server:call(db_serv, {check_cache, Service_ID}).
+	{ok, Pid} = db_sup:get_db(),
+	gen_server:call(Pid, {check_cache, Service_ID}).
 
 get_sid_list() ->
-	gen_server:call(db_serv, {list_all_sids}).
+	{ok, Pid} = db_sup:get_db(),
+	gen_server:call(Pid, {list_all_sids}).
 
 add_entry(Service_ID, Fingerprint, Timestamp) ->
-	gen_server:cast(db_serv, {add_entry, Service_ID, Fingerprint, Timestamp}).
+	{ok, Pid} = db_sup:get_db(),
+	gen_server:cast(Pid, {add_entry, Service_ID, Fingerprint, Timestamp}).
 
 update_entry(Fingerprint, NewTimestamp) ->
-	gen_server:cast(db_serv, {update_entry, Fingerprint, NewTimestamp}).
+	{ok, Pid} = db_sup:get_db(),
+	gen_server:cast(Pid, {update_entry, Fingerprint, NewTimestamp}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Scanning
@@ -232,7 +236,7 @@ scan_list([[CurrentSID] | Rest]) ->
 	scan_list(Rest).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Misc
+%% Signing
 sign(Key_info, SIDBin) ->
 	Data = << SIDBin/binary, Key_info/binary >>,
 	Signature = sign_data(Data),
@@ -249,6 +253,8 @@ sign_data(Data) ->
 			SignedData
 	end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Misc
 time_now() ->
 	LocalTime = erlang:localtime(),
 	Seconds = calendar:datetime_to_gregorian_seconds(LocalTime) - ?UNIX_EPOCH,

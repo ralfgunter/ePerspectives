@@ -19,7 +19,7 @@
 % Rescans all database entries every 24 hours
 -define(DEF_RESCAN_PERIOD, (24 * 3600 * 1000)).
 
--define(DEF_CHILDREN, 5).
+-define(DEF_CHILDREN, 100).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -54,22 +54,6 @@ init([Port, ScannerModule]) ->
                   worker,
                   [udp_listener]
               },
-			  % Key signing supervisor
-			  {   key_serv,
-			      {key_sup, start_link, ["../keys/private.pem", prefork, ?DEF_CHILDREN]},
-				  permanent,
-				  infinity,
-				  supervisor,
-				  []
-			  },
-			  % DB server (caches the scan results)
-			  {   db_serv,
-			      {db_server_dets, start_link, ["../db/sid_file", "../db/fingerprint_file"]},
-				  permanent,
-				  2000,
-				  worker,
-				  [db_server_dets]
-			  },
 			  % Server that requests rescans
 			  {   rescan_serv,
 			      {rescan_server, start_link, [?DEF_RESCAN_PERIOD, [ScannerModule]]},
@@ -78,9 +62,25 @@ init([Port, ScannerModule]) ->
 				  worker,
 				  [rescan_server]
 			  },
+			  % Key signing supervisor
+			  {   key_serv,
+			      {key_sup, start_link, ["../keys/private.pem", basic]},
+				  permanent,
+				  infinity,
+				  supervisor,
+				  []
+			  },
+			  % DB server (caches the scan results)
+			  {   db_sup,
+			      {db_sup, start_link, [db_dets, {"../db/sid_file", "../db/fingerprint_file"}, basic]},
+				  permanent,
+				  infinity,
+				  supervisor,
+				  []
+			  },
               % Scanner instance supervisor
               {   scanner_sup,
-                  {persp_scanner_sup, start_link, [ScannerModule, prefork, ?DEF_CHILDREN]},
+                  {persp_scanner_sup, start_link, [ScannerModule, basic]},
                   permanent,
                   infinity,
                   supervisor,
