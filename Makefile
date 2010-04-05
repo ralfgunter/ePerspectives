@@ -1,17 +1,16 @@
-.PHONY: asn client server
+.PHONY: common client server
 
-all: asn client server
+all: common client server
 
-asn:
+common:
 	@$(MAKE) -C common
 	@cp common/RSA.beam client/ebin/
 	@cp common/RSA.beam server/ebin/
-	@cp common/RSA.hrl client/src/
-	@cp common/RSA.hrl server/src/
+	@cp common/persp_crypto.beam client/ebin/
+	@cp common/persp_crypto.beam server/ebin/
 
 client:
 	@$(MAKE) -C client
-	@cp client/ebin/persp_crypto.beam server/ebin/
 
 server:
 	@$(MAKE) -C server
