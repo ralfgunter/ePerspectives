@@ -7,53 +7,36 @@
 %%% this software.
 
 -module(key_signer).
--behaviour(gen_fsm).
+-behaviour(gen_server).
 
 -include_lib("public_key/include/public_key.hrl").
 
-%% Events
--export([start_to_sign/3]).
-
-%% gen_fsm callbacks
+%% External API
 -export([start_link/1]).
--export([init/1, terminate/3]).
--export([handle_event/3, handle_info/3, handle_sync_event/4]).
--export([code_change/4]).
 
-%% FSM states
--export(['SIGN'/2]).
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%
-%% Events
-%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-start_to_sign(Pid, Data, ScannerPid) ->
-	gen_fsm:send_event(Pid, {sign, Data, ScannerPid}).
+%% gen_server callbacks
+-export([init/1, terminate/2]).
+-export([handle_call/3, handle_cast/2, handle_info/2]).
+-export([code_change/3]).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
-%% gen_fsm callbacks
+%% External API
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-start_link(PrivKey) ->
-	gen_fsm:start_link(?MODULE, PrivKey, []).
+start_link(KeyTuple) ->
+	gen_server:start_link(?MODULE, KeyTuple, []).
 
-init(PrivKey) ->
-	{ok, 'SIGN', PrivKey}.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% gen_server callbacks
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+init(KeyTuple) ->
+	{ok, KeyTuple}.
 
-handle_info(_Info, StateName, StateData) ->
-	{noreply, StateName, StateData}.
-
-handle_sync_event(Event, _From, StateName, StateData) ->
-	{stop, {StateName, undefined_event, Event}, StateData}.
-
-handle_event(Event, StateName, StateData) ->
-	{stop, {StateName, undefined_event, Event}, StateData}.
-
-terminate(_Reason, _StateName, _State) ->
+terminate(_Reason, _KeyTuple) ->
 	% TODO: Do away with this.
 	% There should be no need for a signer to explicitly (in contrast to the
 	% regular erlang methods) inform the supervisor that it has terminated.
@@ -62,20 +45,25 @@ terminate(_Reason, _StateName, _State) ->
 	key_sup:child_terminated(self()),
 	ok.
 
-code_change(_OldVsn, StateName, StateData, _Extra) ->
-	{ok, StateName, StateData}.
+code_change(_OldVersion, KeyTuple, _Extra) ->
+	{ok, KeyTuple}.
+
+handle_cast(_Msg, KeyTuple) ->
+    {noreply, KeyTuple}.
+
+handle_info(_Info, KeyTuple) ->
+    {noreply, KeyTuple}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
-%% FSM States
+%% Call handling
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-'SIGN'({sign, Data, ScannerPid}, PrivKey) ->
-	{ok, SignedData} = sign(Data, PrivKey),
-	ScannerPid ! {ok, SignedData},
+handle_call({sign, Data}, _From, KeyTuple) ->
+	{ok, Signature} = sign(Data, KeyTuple),
 	
-	{stop, normal, PrivKey}.
+	{reply, Signature, KeyTuple}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -83,18 +71,9 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %% Internal API
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-sign(Data, PrivKey) ->
+sign(Data, {Mp_priv_exp, Mp_pub_exp, Mp_mod}) ->
 	% TODO: make DigestType customizable
-	Private_Exponent = PrivKey#'RSAPrivateKey'.privateExponent,
-	Public_Exponent  = PrivKey#'RSAPrivateKey'.publicExponent,
-	Modulus          = PrivKey#'RSAPrivateKey'.modulus,
-	
-	Mp_priv_exp = crypto:mpint(Private_Exponent),
-	Mp_pub_exp  = crypto:mpint(Public_Exponent),
-	Mp_mod      = crypto:mpint(Modulus),
-	
 	Mp_data = << (byte_size(Data)):32/integer-big, Data/binary >>,
-	
 	Signature = crypto:rsa_sign(md5, Mp_data, [Mp_pub_exp, Mp_mod, Mp_priv_exp]),
 	
 	{ok, Signature}.

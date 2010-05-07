@@ -3,8 +3,8 @@
   {description, "Perspectives server/scanner"},
   {vsn, "0.1"},
   {id, "persp_server"},
-  {modules,      [udp_listener, persp_scanner_fsm, key_sup, key_signer, db_sup, db_dets, rescan_server, persp_scanner_sup]},
-  {registered,   [scanner_sup, udp_listen, key_serv, db_serv, rescan_serv]},
+  {modules,      [udp_listener, persp_scanner_fsm, persp_scanner_sup, key_sup, key_signer, db_server_dets]},
+  {registered,   [udp_listen, scanner_sup, db_serv, key_serv]},
   {applications, [kernel, stdlib]},
   %%
   %% mod: Specify the module name to start the application, plus args

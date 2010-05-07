@@ -12,7 +12,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 %% External API
--export([get_signer/0]).
+-export([sign/1]).
 -export([prefork_add/1]).
 
 %% Supervisor behaviour callbacks
@@ -32,13 +32,9 @@
 %% External API
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-get_signer() ->
-    case ets:match(signers, {spawningmode, '$1'}) of
-		[[basic]] ->
-			basic_spawn();
-		[[prefork]] ->
-			prefork_spawn()
-	end.
+sign(Data) ->
+	{ok, Pid} = get_signer(),
+	gen_server:call(Pid, {sign, Data}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -49,28 +45,28 @@ start_link(PrivateKeyFilepath, basic) ->
     ets:new(signers, [named_table, public]),
     ets:insert(signers, {spawningmode, basic}),
     
-	PrivKey = process_key_file(PrivateKeyFilepath),
+	KeyTuple = prepare_key(PrivateKeyFilepath),
 	
-    supervisor:start_link({local, ?MODULE}, ?MODULE, PrivKey).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, KeyTuple).
 
 start_link(PrivateKeyFilepath, prefork, ScannersNumLowerBound) ->
 	ets:new(signers, [named_table, public]),
 	ets:insert(signers, {spawningmode, prefork}),
 	ets:insert(signers, {lowerbound, ScannersNumLowerBound}),
 	
-	PrivKey = process_key_file(PrivateKeyFilepath),
+	KeyTuple = prepare_key(PrivateKeyFilepath),
 	
-	Result = supervisor:start_link({local, ?MODULE}, ?MODULE, PrivKey),
+	Result = supervisor:start_link({local, ?MODULE}, ?MODULE, KeyTuple),
 	prefork_add(ScannersNumLowerBound),
 	Result.
 
-init(PrivKey) ->
+init(KeyTuple) ->
 	{ok,
 		{_SupFlags = {simple_one_for_one, ?MAX_RESTART, ?MAX_TIME},
 			[
 				% Signer
 				{	signer,
-					{key_signer, start_link, [PrivKey]},
+					{key_signer, start_link, [KeyTuple]},
 					temporary,
 					brutal_kill,
 					worker,
@@ -80,11 +76,19 @@ init(PrivKey) ->
 		}
 	}.
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
 %% Spawning modes
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+get_signer() ->
+    case ets:match(signers, {spawningmode, '$1'}) of
+		[[basic]] ->
+			basic_spawn();
+		[[prefork]] ->
+			prefork_spawn()
+	end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Basic - children are spawned only on-demand
@@ -136,6 +140,7 @@ child_terminated(Pid) ->
 			ok
 	end.
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
 %% Internal API
@@ -148,3 +153,20 @@ process_key_file(PrivKeyFilepath) ->
 	{ok, PrivateKey} = public_key:decode_private_key(KeyInfo),
 	
 	PrivateKey.
+
+privkey_to_mpint(PrivKey) ->
+	Private_Exponent = PrivKey#'RSAPrivateKey'.privateExponent,
+	Public_Exponent  = PrivKey#'RSAPrivateKey'.publicExponent,
+	Modulus          = PrivKey#'RSAPrivateKey'.modulus,
+	
+	Mp_priv_exp = crypto:mpint(Private_Exponent),
+	Mp_pub_exp  = crypto:mpint(Public_Exponent),
+	Mp_mod      = crypto:mpint(Modulus),
+	
+	{Mp_priv_exp, Mp_pub_exp, Mp_mod}.
+
+prepare_key(PrivKeyFilepath) ->
+	PrivateKey = process_key_file(PrivKeyFilepath),
+	KeyTuple   = privkey_to_mpint(PrivateKey),
+	
+	KeyTuple.

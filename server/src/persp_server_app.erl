@@ -62,17 +62,17 @@ init([Port, ScannerModule]) ->
 				  worker,
 				  [rescan_server]
 			  },
+			  % DB server (caches the scan results)
+			  {   db_serv,
+			      {db_server_dets, start_link, ["../db/cache", "../db/sids"]},
+				  permanent,
+				  2000,
+				  worker,
+				  []
+			  },
 			  % Key signing supervisor
 			  {   key_serv,
 			      {key_sup, start_link, ["../keys/private.pem", basic]},
-				  permanent,
-				  infinity,
-				  supervisor,
-				  []
-			  },
-			  % DB server (caches the scan results)
-			  {   db_sup,
-			      {db_sup, start_link, [db_dets, {"../db/sid_file", "../db/fingerprint_file"}, basic]},
 				  permanent,
 				  infinity,
 				  supervisor,

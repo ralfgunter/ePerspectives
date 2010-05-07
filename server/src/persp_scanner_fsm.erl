@@ -162,20 +162,16 @@ prepare_timestamps([CurrentPair | Rest], Results) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database access
 check_cache(Service_ID) ->
-	{ok, Pid} = db_sup:get_db(),
-	gen_server:call(Pid, {check_cache, Service_ID}).
+	gen_server:call(db_serv, {check_cache, Service_ID}).
 
 get_sid_list() ->
-	{ok, Pid} = db_sup:get_db(),
-	gen_server:call(Pid, {list_all_sids}).
+	gen_server:call(db_serv, {list_all_sids}).
 
 add_entry(Service_ID, Fingerprint, Timestamp) ->
-	{ok, Pid} = db_sup:get_db(),
-	gen_server:cast(Pid, {add_entry, Service_ID, Fingerprint, Timestamp}).
+	gen_server:cast(db_serv, {add_entry, Service_ID, Fingerprint, Timestamp}).
 
-update_entry(Fingerprint, NewTimestamp) ->
-	{ok, Pid} = db_sup:get_db(),
-	gen_server:cast(Pid, {update_entry, Fingerprint, NewTimestamp}).
+update_entry(Service_ID, Fingerprint, NewTimestamp) ->
+	gen_server:cast(db_serv, {update_entry, Service_ID, Fingerprint, NewTimestamp}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Scanning
@@ -203,10 +199,10 @@ new_scan(Service_ID, Domain, Port) ->
 	
 	{Fingerprint, [{Timestamp, Timestamp}]}.
 
-rescan_entry(_Service_ID, Domain, Port) ->
+rescan_entry(Service_ID, Domain, Port) ->
 	{ok, Fingerprint} = get_fingerprint(Domain, Port),
 	Timestamp = time_now(),
-	update_entry(Fingerprint, Timestamp).
+	update_entry(Service_ID, Fingerprint, Timestamp).
 
 get_fingerprint(Domain, Port) ->
 	case ssl:connect(Domain, Port, ?SOCKET_OPTS) of
@@ -228,7 +224,7 @@ get_fingerprint(Domain, Port) ->
 scan_list([]) ->
 	ok;
 
-scan_list([[CurrentSID] | Rest]) ->
+scan_list([CurrentSID | Rest]) ->
 	{ok, Pid} = persp_scanner_sup:get_scanner(),
 	[Domain, Port, _Service_type] = string:tokens(CurrentSID, ":,"),
 	IntPort = list_to_integer(Port),
@@ -244,14 +240,7 @@ sign(Key_info, SIDBin) ->
 	Signature.
 
 sign_data(Data) ->
-	%gen_server:call(key_server, {sign, Data}).
-	
-	{ok, Pid} = key_sup:get_signer(),
-	key_signer:start_to_sign(Pid, Data, self()),
-	receive
-		{ok, SignedData} ->
-			SignedData
-	end.
+	key_sup:sign(Data).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Misc

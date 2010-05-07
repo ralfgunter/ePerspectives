@@ -23,18 +23,19 @@
 %% gen_server callbacks
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-start_link(Sid_table_file, Fingerprint_table_file) ->
-	gen_server:start_link({local, db_serv}, ?MODULE, 
-							[Sid_table_file, Fingerprint_table_file], []).
+start_link(Cache_filename, Sids_filename) ->
+	gen_server:start_link({local, db_serv}, ?MODULE,
+						  [Cache_filename, Sids_filename], []).
 
-init([Sid_file, Fingerprint_file]) ->
-	load_db_files([Sid_file, Fingerprint_file]),
+init(DBFiles) ->
+	load_db_files(DBFiles),
 	process_flag(trap_exit, true),
+	
 	{ok, {}}.
 
 terminate(_Reason, _State) ->
 	dets:close(sids),
-	dets:close(fingerprints).
+	dets:close(cache).
 
 code_change(_OldVersion, State, _Extra) ->
 	{ok, State}.
@@ -52,8 +53,8 @@ handle_cast({add_entry, Service_ID, Fingerprint, Timestamp}, Files) ->
 	add_entry(Service_ID, Fingerprint, Timestamp),
 	{noreply, ok, Files};
 
-handle_cast({update_entry, Fingerprint, NewTimestamp}, Files) ->
-	update_entry(Fingerprint, NewTimestamp),
+handle_cast({update_entry, Service_ID, Fingerprint, NewTimestamp}, Files) ->
+	update_entry(Service_ID, Fingerprint, NewTimestamp),
 	{noreply, ok, Files};
 
 handle_cast(_Msg, State) ->
@@ -86,21 +87,23 @@ handle_call(Request, _From, Files) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Queries
 add_entry(Service_ID, Fingerprint, Timestamp) ->
-	dets:insert(sids, {Service_ID, Fingerprint}),
-	dets:insert(fingerprints, {Fingerprint, [{Timestamp, Timestamp}]}).
-
-update_entry(Fingerprint, NewEnd) ->
-	[[Timestamps]] = dets:match(fingerprints, {Fingerprint, '$1'}),
-	[{Beg, _OldEnd} | Rest] = Timestamps,
+	add_fingerprint(Service_ID, Fingerprint),
 	
-	dets:update_element(fingerprints, Fingerprint, {2, [{Beg, NewEnd} | Rest]}).
+	% TODO: put this in its own function?
+	dets:insert(cache, { {Service_ID, Fingerprint},
+						 [ {Timestamp, Timestamp} ]
+					   }).
+
+update_entry(Service_ID, Fingerprint, NewEnd) ->
+	Timestamps = get_timestamps(Service_ID, Fingerprint),
+	update_timestamps(Service_ID, Fingerprint, Timestamps, NewEnd).
 
 check_cache(Service_ID) ->
 	case dets:member(sids, Service_ID) of
 		true ->
-			Fingerprints_list = check_service_id(Service_ID),
-			Timestamps_list   = check_fingerprints(Fingerprints_list),
-			ResultPairs = lists:zip(Fingerprints_list, Timestamps_list),
+			Fingerprints = check_service_id(Service_ID),
+			Timestamps   = check_fingerprints(Service_ID, Fingerprints),
+			ResultPairs  = lists:zip(Fingerprints, Timestamps),
 			
 			ResultPairs;
 		false ->
@@ -108,27 +111,45 @@ check_cache(Service_ID) ->
 	end.
 
 list_all_sids() ->
-	dets:match(sids, {'$1', _ = '_'}).
+	% TODO: find a function that lists all the keys in a table.
+	Results = dets:match(sids, {'$1', _ = '_'}),
+	
+	lists:append(Results).
 
 %% Query processing
 check_service_id(Service_ID) ->
-	TempList = dets:match(sids, {Service_ID, '$1'}),
-	Result  = lists:append(TempList),
+	% TODO: find a function that's as lightweight as lookup, but returns only
+	% the matching objects' values, instead of the entire object.
+	TempList = dets:lookup(sids, Service_ID),
 	
-	Result.
+	lists:map(fun({_Key, Value}) -> Value end, TempList).
 
-check_fingerprints(Fingerprints_list) ->
-	check_fingerprints(Fingerprints_list, []).
+check_fingerprints(Service_ID, Fingerprints) ->
+	Lambda = fun(CurrentFingerprint) ->
+		get_timestamps(Service_ID, CurrentFingerprint)
+	end,
+	
+	lists:map(Lambda, Fingerprints).
 
-check_fingerprints([], Results) ->
-	Results;
+%% Database internal representation
+add_fingerprint(Service_ID, Fingerprint) ->
+	dets:insert(sids, {Service_ID, Fingerprint}).
 
-check_fingerprints([CurrentFingerprint | Rest], ResultsSoFar) ->
-	[[Timestamps]] = dets:match(fingerprints, {CurrentFingerprint, '$1'}),
-	check_fingerprints(Rest, [Timestamps | ResultsSoFar]).
+get_timestamps(Service_ID, Fingerprint) ->
+	[{_Key, Timestamps}] = dets:lookup(cache, {Service_ID, Fingerprint}),
+	
+	Timestamps.
+
+update_timestamps(Service_ID, Fingerprint, Timestamps, NewEnd) ->
+	[{Beg, _OldEnd} | Rest] = Timestamps,
+	
+	% TODO: put this in its own function?
+	dets:insert(cache, { {Service_ID, Fingerprint},
+						 [ {Beg, NewEnd} | Rest ]
+					   }).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database initialization and loading
-load_db_files([Sid_filename, Fingerprint_filename]) ->
-	dets:open_file(sids, [{type, bag}, {file, Sid_filename}]),
-	dets:open_file(fingerprints, [{file, Fingerprint_filename}]).
+load_db_files([Sids_filename, Cache_filename]) ->
+	dets:open_file(sids,  [{file, Sids_filename}, {type, bag}]),
+	dets:open_file(cache, [{file, Cache_filename}]).
