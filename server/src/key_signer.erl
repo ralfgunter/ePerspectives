@@ -37,12 +37,6 @@ init(KeyTuple) ->
 	{ok, KeyTuple}.
 
 terminate(_Reason, _KeyTuple) ->
-	% TODO: Do away with this.
-	% There should be no need for a signer to explicitly (in contrast to the
-	% regular erlang methods) inform the supervisor that it has terminated.
-	% This is probably inefficient in a large scale and ties the implementation
-	% of the child with the supervisor's.
-	key_sup:child_terminated(self()),
 	ok.
 
 code_change(_OldVersion, KeyTuple, _Extra) ->
@@ -74,6 +68,7 @@ handle_call({sign, Data}, _From, KeyTuple) ->
 sign(Data, {Mp_priv_exp, Mp_pub_exp, Mp_mod}) ->
 	% TODO: make DigestType customizable
 	Mp_data = << (byte_size(Data)):32/integer-big, Data/binary >>,
-	Signature = crypto:rsa_sign(md5, Mp_data, [Mp_pub_exp, Mp_mod, Mp_priv_exp]),
+	Signature = crypto:rsa_sign(md5, Mp_data,
+								[Mp_pub_exp, Mp_mod, Mp_priv_exp]),
 	
 	{ok, Signature}.

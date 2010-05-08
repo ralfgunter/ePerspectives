@@ -45,6 +45,7 @@ rescan_all() ->
 	SIDList = get_sid_list(),
 	scan_list(SIDList).
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
 %% gen_fsm callbacks
@@ -63,12 +64,6 @@ handle_event(Event, StateName, StateData) ->
 	{stop, {StateName, undefined_event, Event}, StateData}.
 
 terminate(_Reason, _StateName, _State) ->
-	% TODO: Do away with this.
-	% There should be no need for a scanner to explicitly (in contrast to the
-	% regular erlang methods) inform the supervisor that it has terminated.
-	% This is probably inefficient in a large scale and ties the implementation
-	% of the child with the supervisor's.
-	persp_scanner_sup:child_terminated(self()),
 	ok.
 
 code_change(_OldVsn, StateName, StateData, _Extra) ->
@@ -104,13 +99,11 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Parsing
 parse_scan_data(ScanData) ->
-	Data = ScanData#scan_data.data,
+	<< _:80, SIDBin/binary >> = ScanData#scan_data.data,
 	
-	<<_:48, Name_len:16, _:16, SIDBin/binary>> = Data,
-	
-	parse_sid_bin(SIDBin, Name_len).
+	parse_sid_bin(SIDBin).
 
-parse_sid_bin(SIDBin, _Name_len) ->
+parse_sid_bin(SIDBin) ->
 	SIDList = binary_to_list(SIDBin),
 	ParsedSID = string:tokens(SIDList, ":,"),
 	
@@ -145,33 +138,31 @@ prepare_response(Service_ID, [CurrentEntry | Rest], Results) ->
 	prepare_response(Service_ID, Rest, << Results/binary, Data/binary >>).
 
 prepare_timestamps(Timestamps) ->
-	prepare_timestamps(Timestamps, <<>>).
-
-% This is called once we're done parsing timestamps
-prepare_timestamps([], Results) ->
-	Results;
-
-% This is called once per timestamp
-prepare_timestamps([CurrentPair | Rest], Results) ->
-	{Timestamp_beg, Timestamp_end} = CurrentPair,
+	Lambda = fun(CurrentTimestamp, ResultSoFar) ->
+		{Timestamp_beg, Timestamp_end} = CurrentTimestamp,
+		
+		<< ResultSoFar/binary, Timestamp_beg:32, Timestamp_end:32 >>
+	end,
 	
-	NewResults = << Results/binary, Timestamp_beg:32, Timestamp_end:32 >>,
-	
-	prepare_timestamps(Rest, NewResults).
+	lists:foldl(Lambda, <<>>, Timestamps).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database access
 check_cache(Service_ID) ->
-	gen_server:call(db_serv, {check_cache, Service_ID}).
+	gen_server:call(db_serv,
+					{check_cache, Service_ID}).
 
 get_sid_list() ->
-	gen_server:call(db_serv, {list_all_sids}).
+	gen_server:call(db_serv,
+					{list_all_sids}).
 
 add_entry(Service_ID, Fingerprint, Timestamp) ->
-	gen_server:cast(db_serv, {add_entry, Service_ID, Fingerprint, Timestamp}).
+	gen_server:cast(db_serv,
+					{add_entry, Service_ID, Fingerprint, Timestamp}).
 
 update_entry(Service_ID, Fingerprint, NewTimestamp) ->
-	gen_server:cast(db_serv, {update_entry, Service_ID, Fingerprint, NewTimestamp}).
+	gen_server:cast(db_serv,
+					{update_entry, Service_ID, Fingerprint, NewTimestamp}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Scanning
@@ -215,21 +206,21 @@ get_fingerprint(Domain, Port) ->
 			{ok, KeyFingerprint};
 		{error, Reason} ->
 			error_logger:error_msg("Failed to connect to ~p:~p - ~p\n",
-									[Domain, Port, Reason]),
+								   [Domain, Port, Reason]),
 			{error, Reason}
 	end.
 
 % This spawns a new scanner for each element in the list
 % TODO: there should be a way to control how many of these go off simultaneously
-scan_list([]) ->
-	ok;
-
-scan_list([CurrentSID | Rest]) ->
-	{ok, Pid} = persp_scanner_sup:get_scanner(),
-	[Domain, Port, _Service_type] = string:tokens(CurrentSID, ":,"),
-	IntPort = list_to_integer(Port),
-	rescan(Pid, CurrentSID, Domain, IntPort),
-	scan_list(Rest).
+scan_list(SIDList) ->
+	Lambda = fun(CurrentSID) ->
+		{ok, Pid} = persp_scanner_sup:get_scanner(),
+		[Domain, Port, _Service_type] = string:tokens(CurrentSID, ":,"),
+		IntPort = list_to_integer(Port),
+		rescan(Pid, CurrentSID, Domain, IntPort)
+	end,
+	
+	lists:foreach(Lambda, SIDList).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Signing

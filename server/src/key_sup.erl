@@ -13,15 +13,10 @@
 
 %% External API
 -export([sign/1]).
--export([prefork_add/1]).
 
 %% Supervisor behaviour callbacks
--export([start_link/2, start_link/3]).
+-export([start_link/2]).
 -export([init/1]).
-
-%% Spawners and related functions
--export([basic_spawn/0, prefork_spawn/0]).
--export([child_terminated/1]).
 
 -define(MAX_RESTART,     5).
 -define(MAX_TIME,       60).
@@ -33,7 +28,7 @@
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 sign(Data) ->
-	{ok, Pid} = get_signer(),
+	{ok, Pid} = basic_spawn(),
 	gen_server:call(Pid, {sign, Data}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -42,23 +37,9 @@ sign(Data) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link(PrivateKeyFilepath, basic) ->
-    ets:new(signers, [named_table, public]),
-    ets:insert(signers, {spawningmode, basic}),
-    
-	KeyTuple = prepare_key(PrivateKeyFilepath),
+    KeyTuple = prepare_key(PrivateKeyFilepath),
 	
     supervisor:start_link({local, ?MODULE}, ?MODULE, KeyTuple).
-
-start_link(PrivateKeyFilepath, prefork, ScannersNumLowerBound) ->
-	ets:new(signers, [named_table, public]),
-	ets:insert(signers, {spawningmode, prefork}),
-	ets:insert(signers, {lowerbound, ScannersNumLowerBound}),
-	
-	KeyTuple = prepare_key(PrivateKeyFilepath),
-	
-	Result = supervisor:start_link({local, ?MODULE}, ?MODULE, KeyTuple),
-	prefork_add(ScannersNumLowerBound),
-	Result.
 
 init(KeyTuple) ->
 	{ok,
@@ -82,63 +63,11 @@ init(KeyTuple) ->
 %% Spawning modes
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-get_signer() ->
-    case ets:match(signers, {spawningmode, '$1'}) of
-		[[basic]] ->
-			basic_spawn();
-		[[prefork]] ->
-			prefork_spawn()
-	end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Basic - children are spawned only on-demand
+%% Basic - children are spawned on-demand
 basic_spawn() ->
 	supervisor:start_child(?MODULE, []).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Prefork - starts with a number of children, spawning more if necessary
-
-% Adds new signers to the signers list.
-prefork_add(0) ->
-	ok;
-
-prefork_add(Counter) ->
-	{ok, Pid} = supervisor:start_child(?MODULE, []),
-	ets:insert(signers, {Pid, waiting}),
-	prefork_add(Counter - 1).
-
-% Looks for an available (waiting) signer child in the signers list.
-% If one is found, it is returned, and its entry is properly updated.
-% Otherwise, it spawns a new one (but doesn't add it to the list).
-prefork_spawn() ->
-	case ets:match(signers, {'$1', waiting}) of
-		[] ->
-			supervisor:start_child(?MODULE, []);
-		Matches ->
-			[Pid] = lists:nth(1, Matches),
-			ets:update_element(signers, Pid, {2, scanning}),
-			{ok, Pid}
-	end.
-
-% Deletes a terminated signer from the signers list.
-child_terminated(Pid) ->
-	case ets:match(signers, {spawningmode, '$1'}) of
-		[[prefork]] ->
-			% If the terminated child was in the list, spawn another one to
-			% replace it; this guarantees that the number of signers remains at
-			% least ScannersNumLowerBound.
-			% Otherwise, it was spawned to keep up with the demand, and thus
-			% does not need to be replaced.
-			case ets:member(signers, Pid) of
-				true ->
-					ets:delete(signers, Pid),
-					prefork_add(1);
-				false ->
-					ok
-			end;
-		[[basic]] ->
-			ok
-	end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
