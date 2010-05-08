@@ -6,7 +6,7 @@
 
 Basically, man-in-the-middle attacks work by tampering with the connection between the user and a given server, and, say, diverging the connection to a malicious copy of the website. By providing different levels of authentication, SSL can help guarantee that the connection is not being tampered with. Unfortunately, this comes at a sometimes unfeasible cost, and can't always ensure that the received certificate belongs to the real website. For example, if the attacker gets a certificate from a "Certificate Authority" for his fake website, then the user might not notice anything unusual unless they manually verify it.
 
-By probing the target website from multiple "perspectives", one diminishes the probability of being fooled by a fake certificate. This is because it would require compromising several paths to the website at the same time. If even one of them is kept intact, the user can easily notice it by checking the discrepancies in the reported fingerprints. Furthermore, each server keeps a record of the keys used by servers over time, so a suspicious recent change in the fingerprint can be noticed as well.
+By probing the target website from multiple "perspectives", one diminishes the probability of being fooled by a fake certificate. This is because it would require compromising several paths to the website at the same time. If even one of them is kept intact, the user can easily notice the tampering by checking the discrepancies in the reported fingerprints. Furthermore, each server keeps a record of the keys used by servers over time, so a suspicious recent change in the fingerprint can be noticed as well.
 
 For more information and a paper on Perspectives, please visit the official website at http://www.cs.cmu.edu/~perspectives
 
@@ -42,12 +42,12 @@ After compiling, make sure all necessary folders/files are in place:
                - must be in the PEM format.
  
  server/db/ - holds the cached results
-   \_ sid_file
-               - default storage for the sids table;
+   \_ cache
+               - default storage for the cache table;
                - subject to change;
                - for now, automatically created only by dets.
-   \_ fingerprint_file
-               - default storage for the fingerprints table;
+   \_ sids
+               - default storage for the sids table;
                - subject to change;
                - for now, automatically created only by dets.
 
@@ -68,7 +68,7 @@ If you want more information, it is recommended that you start the eshell with t
 
 =Compatibility
 
-ePerspectives has been tested on Ubuntu 9.10, running Erlang/OTP R13B04.
+ePerspectives has been tested on Ubuntu 9.10 and 10.04, running Erlang/OTP R13B04.
 
 =License
 
