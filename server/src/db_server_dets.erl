@@ -9,6 +9,8 @@
 -module(db_server_dets).
 -behaviour(gen_server).
 
+-compile(export_all).
+
 %% External API
 -export([start_link/2]).
 
@@ -53,8 +55,8 @@ handle_cast({add_entry, Service_ID, Fingerprint, Timestamp}, Files) ->
 	add_entry(Service_ID, Fingerprint, Timestamp),
 	{noreply, ok, Files};
 
-handle_cast({update_entry, Service_ID, Fingerprint, NewTimestamp}, Files) ->
-	update_entry(Service_ID, Fingerprint, NewTimestamp),
+handle_cast({merge_entry, Service_ID, Fingerprint, Timestamp}, Files) ->
+	merge_entry(Service_ID, Fingerprint, Timestamp),
 	{noreply, ok, Files};
 
 handle_cast(_Msg, State) ->
@@ -88,15 +90,7 @@ handle_call(Request, _From, Files) ->
 %% Queries
 add_entry(Service_ID, Fingerprint, Timestamp) ->
 	add_fingerprint(Service_ID, Fingerprint),
-	
-	% TODO: put this in its own function?
-	dets:insert(cache, { {Service_ID, Fingerprint},
-						 [ {Timestamp, Timestamp} ]
-					   }).
-
-update_entry(Service_ID, Fingerprint, NewEnd) ->
-	Timestamps = get_timestamps(Service_ID, Fingerprint),
-	update_timestamps(Service_ID, Fingerprint, Timestamps, NewEnd).
+	add_new_entry(Service_ID, Fingerprint, Timestamp).
 
 check_cache(Service_ID) ->
 	case dets:member(sids, Service_ID) of
@@ -115,6 +109,37 @@ list_all_sids() ->
 	Results = dets:match(sids, {'$1', _ = '_'}),
 	
 	lists:append(Results).
+
+% TODO: is another procedure/query necessary here?
+%
+% There are two possible cases here:
+%     1) The fingerprint is the same as last time
+%     2) The fingerprint is not the same as the last one
+%
+% In the second case, there are two additional possibilities:
+%     2.1) The new fingerprint is already in the database
+%     2.2) The new fingerprint is not yet in the database
+%
+% 1 would require a simple update_entry call. However, 2 is a bit trickier.
+% Unfortunately, add_entry only handles 2.2, but 2.1 might happen if, for
+% example, the server being tested alternates certificates (e.g. Google).
+merge_entry(Service_ID, Fingerprint, Timestamp) ->
+	LastFingerprint = get_most_recent_fingerprint(Service_ID),
+	
+	update_entry(Service_ID, LastFingerprint, Timestamp),
+	
+	case Fingerprint of
+		LastFingerprint ->
+			ok;
+		_AnotherFingerprint ->
+			case dets:member(cache, {Service_ID, Fingerprint}) of
+				true ->
+					add_timestamp(Service_ID, Fingerprint,
+								  Timestamp + 1, Timestamp + 1);
+				false ->
+					add_entry(Service_ID, Fingerprint, Timestamp + 1)
+			end
+	end.
 
 %% Query processing
 check_service_id(Service_ID) ->
@@ -135,6 +160,13 @@ check_fingerprints(Service_ID, Fingerprints) ->
 add_fingerprint(Service_ID, Fingerprint) ->
 	dets:insert(sids, {Service_ID, Fingerprint}).
 
+add_timestamp(Service_ID, Fingerprint, Timestamp_beg, Timestamp_end) ->
+	Timestamps = get_timestamps(Service_ID, Fingerprint),
+	
+	dets:insert(cache, { {Service_ID, Fingerprint},
+						 [ {Timestamp_beg, Timestamp_end} | Timestamps ]
+					   }).
+
 get_timestamps(Service_ID, Fingerprint) ->
 	[{_Key, Timestamps}] = dets:lookup(cache, {Service_ID, Fingerprint}),
 	
@@ -147,6 +179,35 @@ update_timestamps(Service_ID, Fingerprint, Timestamps, NewEnd) ->
 	dets:insert(cache, { {Service_ID, Fingerprint},
 						 [ {Beg, NewEnd} | Rest ]
 					   }).
+
+add_new_entry(Service_ID, Fingerprint, Timestamp) ->
+	dets:insert(cache, { {Service_ID, Fingerprint},
+						 [ {Timestamp, Timestamp} ]
+					   }).
+
+% Helper functions
+get_most_recent_fingerprint(Service_ID) ->
+	[Head | Rest] = check_cache(Service_ID),
+	
+	% TODO: perhaps put this in its own module?
+	% TODO: find out if it's faster to sort with usort and then get the head
+    Lambda = fun(CurrentTimestamp, BiggestYet) ->
+        {_, [{_, BiggestEnd} | _]} = BiggestYet,
+        {_, [{_, CurrentEnd} | _]} = CurrentTimestamp,
+        
+        if
+            CurrentEnd > BiggestEnd -> CurrentTimestamp;
+            true -> BiggestYet
+        end
+    end,
+	
+	{LastFingerprint, _Timestamps} = lists:foldl(Lambda, Head, Rest),
+	
+	LastFingerprint.
+
+update_entry(Service_ID, Fingerprint, NewEnd) ->
+	Timestamps = get_timestamps(Service_ID, Fingerprint),
+	update_timestamps(Service_ID, Fingerprint, Timestamps, NewEnd).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database initialization and loading

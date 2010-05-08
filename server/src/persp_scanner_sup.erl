@@ -16,8 +16,8 @@
 -export([start_link/2]).
 -export([init/1]).
 
--define(MAX_RESTART,     5).
--define(MAX_TIME,       60).
+-define(MAX_RESTART,  5).
+-define(MAX_TIME,    60).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%

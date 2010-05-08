@@ -17,9 +17,7 @@
 -define(DEF_PORT,    15217).
 
 % Rescans all database entries every 24 hours
--define(DEF_RESCAN_PERIOD, (24 * 3600 * 1000)).
-
--define(DEF_CHILDREN, 100).
+-define(DEF_RESCAN_PERIOD, (10 * 1000)).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -55,13 +53,13 @@ init([Port, ScannerModule]) ->
                   [udp_listener]
               },
 			  % Server that requests rescans
-			  {   rescan_serv,
-			      {rescan_server, start_link, [?DEF_RESCAN_PERIOD, [ScannerModule]]},
-				  permanent,
-				  2000,
-				  worker,
-				  [rescan_server]
-			  },
+%			  {   rescan_serv,
+%			      {rescan_server, start_link, [?DEF_RESCAN_PERIOD, [ScannerModule]]},
+%				  permanent,
+%				  2000,
+%				  worker,
+%				  [rescan_server]
+%			  },
 			  % DB server (caches the scan results)
 			  {   db_serv,
 			      {db_server_dets, start_link, ["../db/cache", "../db/sids"]},

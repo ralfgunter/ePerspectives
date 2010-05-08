@@ -77,9 +77,5 @@ prepare_timers(Interval, [CurrentScanner | Rest], TimerRefs) ->
 			{error, Reason}
 	end.
 
-delete_timers([]) ->
-	ok;
-
-delete_timers([CurrentRef | Rest]) ->
-	timer:cancel(CurrentRef),
-	delete_timers(Rest).
+delete_timers(TimerList) ->
+	lists:foreach(fun(Ref) -> timer:cancel(Ref) end, TimerList).

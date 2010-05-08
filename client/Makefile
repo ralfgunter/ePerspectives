@@ -7,7 +7,7 @@ all: client
 client: ${CLIENT_OBJ}
 
 ebin/%.beam: src/%.erl
-	erlc -o `dirname $@` $<
+	erlc -o ebin/ $<
 
 clean:
 	rm -rf ebin/*.beam

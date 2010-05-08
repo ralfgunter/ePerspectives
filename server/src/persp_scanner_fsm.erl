@@ -9,6 +9,8 @@
 -module(persp_scanner_fsm).
 -behaviour(gen_fsm).
 
+-compile(export_all).
+
 -define(UNIX_EPOCH, 62167219200).
 -define(SIG_LEN, 172).
 -define(SCAN_TIMEOUT, 5000).
@@ -148,6 +150,10 @@ prepare_timestamps(Timestamps) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database access
+add_entry(Service_ID, Fingerprint, Timestamp) ->
+	gen_server:cast(db_serv,
+					{add_entry, Service_ID, Fingerprint, Timestamp}).
+
 check_cache(Service_ID) ->
 	gen_server:call(db_serv,
 					{check_cache, Service_ID}).
@@ -156,13 +162,9 @@ get_sid_list() ->
 	gen_server:call(db_serv,
 					{list_all_sids}).
 
-add_entry(Service_ID, Fingerprint, Timestamp) ->
+merge_entry(Service_ID, Fingerprint, Timestamp) ->
 	gen_server:cast(db_serv,
-					{add_entry, Service_ID, Fingerprint, Timestamp}).
-
-update_entry(Service_ID, Fingerprint, NewTimestamp) ->
-	gen_server:cast(db_serv,
-					{update_entry, Service_ID, Fingerprint, NewTimestamp}).
+					{merge_entry, Service_ID, Fingerprint, Timestamp}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Scanning
@@ -193,13 +195,14 @@ new_scan(Service_ID, Domain, Port) ->
 rescan_entry(Service_ID, Domain, Port) ->
 	{ok, Fingerprint} = get_fingerprint(Domain, Port),
 	Timestamp = time_now(),
-	update_entry(Service_ID, Fingerprint, Timestamp).
+	
+	merge_entry(Service_ID, Fingerprint, Timestamp).
 
 get_fingerprint(Domain, Port) ->
 	case ssl:connect(Domain, Port, ?SOCKET_OPTS) of
 		{ok, Socket} ->
-			{ok, Cert} = ssl:peercert(Socket),
-			KeyFingerprint = crypto:md5(Cert),
+			{ok, Certificate} = ssl:peercert(Socket),
+			KeyFingerprint = crypto:md5(Certificate),
 			
 			ssl:close(Socket),
 			
@@ -242,8 +245,8 @@ time_now() ->
 	Seconds.
 
 send_results(ScanData, Results) ->
-	ClientSocket  = ScanData#scan_data.socket,
 	ClientAddress = ScanData#scan_data.address,
+	ClientSocket  = ScanData#scan_data.socket,
 	ClientPort    = ScanData#scan_data.port,
 	
 	case gen_udp:send(ClientSocket, ClientAddress, ClientPort, Results) of
