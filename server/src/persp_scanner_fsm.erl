@@ -9,8 +9,6 @@
 -module(persp_scanner_fsm).
 -behaviour(gen_fsm).
 
--compile(export_all).
-
 -define(UNIX_EPOCH, 62167219200).
 -define(SIG_LEN, 172).
 -define(SCAN_TIMEOUT, 5000).
@@ -154,6 +152,10 @@ add_entry(Service_ID, Fingerprint, Timestamp) ->
 	gen_server:cast(db_serv,
 					{add_entry, Service_ID, Fingerprint, Timestamp}).
 
+merge_entry(Service_ID, Fingerprint, Timestamp) ->
+	gen_server:cast(db_serv,
+					{merge_entry, Service_ID, Fingerprint, Timestamp}).
+
 check_cache(Service_ID) ->
 	gen_server:call(db_serv,
 					{check_cache, Service_ID}).
@@ -161,10 +163,6 @@ check_cache(Service_ID) ->
 get_sid_list() ->
 	gen_server:call(db_serv,
 					{list_all_sids}).
-
-merge_entry(Service_ID, Fingerprint, Timestamp) ->
-	gen_server:cast(db_serv,
-					{merge_entry, Service_ID, Fingerprint, Timestamp}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Scanning

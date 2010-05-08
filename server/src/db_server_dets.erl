@@ -9,8 +9,6 @@
 -module(db_server_dets).
 -behaviour(gen_server).
 
--compile(export_all).
-
 %% External API
 -export([start_link/2]).
 
@@ -51,13 +49,13 @@ handle_info(_Info, State) ->
 %% Cast handling (asynchronous commands)
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({add_entry, Service_ID, Fingerprint, Timestamp}, Files) ->
-	add_entry(Service_ID, Fingerprint, Timestamp),
-	{noreply, ok, Files};
-
-handle_cast({merge_entry, Service_ID, Fingerprint, Timestamp}, Files) ->
+handle_cast({merge_entry, Service_ID, Fingerprint, Timestamp}, State) ->
 	merge_entry(Service_ID, Fingerprint, Timestamp),
-	{noreply, ok, Files};
+	{noreply, State};
+
+handle_cast({add_entry, Service_ID, Fingerprint, Timestamp}, State) ->
+	add_entry(Service_ID, Fingerprint, Timestamp),
+	{noreply, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -68,16 +66,16 @@ handle_cast(_Msg, State) ->
 %% Call handling
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_call({check_cache, Service_ID}, _From, Files) ->
+handle_call({check_cache, Service_ID}, _From, State) ->
 	Cache = check_cache(Service_ID),
-	{reply, Cache, Files};
+	{reply, Cache, State};
 
-handle_call({list_all_sids}, _From, Files) ->
+handle_call({list_all_sids}, _From, State) ->
 	List = list_all_sids(),
-	{reply, List, Files};
+	{reply, List, State};
 
-handle_call(Request, _From, Files) ->
-    {stop, {unknown_call, Request}, Files}.
+handle_call(Request, _From, State) ->
+    {stop, {unknown_call, Request}, State}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
