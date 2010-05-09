@@ -10,7 +10,8 @@
 -behaviour(supervisor).
 
 %% External API
--export([get_scanner/0]).
+-export([dispatch_scanner/1]).
+-export([get_ssl_scanner/0]).
 
 %% Supervisor behaviour callbacks
 -export([start_link/2]).
@@ -25,8 +26,22 @@
 %% External API
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-get_scanner() ->
-    basic_spawn().
+dispatch_scanner(ScanData) ->
+	% TODO: come up with better names for ScanInfo and ScanData
+	% ScanInfo: {Address, Port, Service_type}
+	%			- information about the server
+	% ScanData: {ClientSocket, ClientAddress, ClientPort, ClientData}
+	%			- information about the client (plus the scan request it sent)
+	ScanInfo = {_, _, Service_type} = persp_parser:parse_scan_data(ScanData),
+	
+	% TODO: perhaps this should be fetched from an ets table, which in turn
+	%       is loaded from a config file.
+	case Service_type of
+		"2" ->
+			{ok, Pid} = get_ssl_scanner(),
+			persp_scanner_ssl:start_scan(Pid, {ScanInfo, ScanData})
+	end.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -55,11 +70,11 @@ init([ScannerModule]) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
-%% Spawning modes
+%% Scanners
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Basic - scanners are spawned only on-demand
-basic_spawn() ->
+%% SSL
+get_ssl_scanner() ->
     supervisor:start_child(?MODULE, []).

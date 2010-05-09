@@ -13,6 +13,7 @@
 -define(SCAN_TIMEOUT, 5000).
 -define(SOCKET_OPTS, [binary, {reuseaddr, true}, {active, false}]).
 
+%% External API
 -export([start_link/0, start_scan/2, rescan_all/0]).
 
 %% gen_fsm callbacks
@@ -34,11 +35,11 @@
 start_link() ->
 	gen_fsm:start_link(?MODULE, [], []).
 
-start_scan(Pid, ScanData) when is_pid(Pid) ->
-	gen_fsm:send_event(Pid, {start_scan, ScanData}).
+start_scan(Pid, ScanPair) when is_pid(Pid) ->
+	gen_fsm:send_event(Pid, {start_scan, ScanPair}).
 
-rescan(Pid, Service_ID, Domain, Port) when is_pid(Pid) ->
-	gen_fsm:send_event(Pid, {rescan, Service_ID, Domain, Port}).
+rescan(Pid, Service_ID, Address, Port) when is_pid(Pid) ->
+	gen_fsm:send_event(Pid, {rescan, Service_ID, Address, Port}).
 
 rescan_all() ->
 	SIDList = get_sid_list(),
@@ -74,8 +75,8 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %% FSM States
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-'SCAN'({start_scan, ScanData}, State) ->
-	case scan(ScanData) of
+'SCAN'({start_scan, {ScanInfo, ScanData}}, State) ->
+	case scan(ScanInfo) of
 		{ok, Service_ID, Results} ->
 			BinResponse = persp_parser:prepare_response(Service_ID, Results),
 			send_results(ScanData, BinResponse);
@@ -84,8 +85,8 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 	end,
 	{stop, normal, State};
 
-'SCAN'({rescan, Service_ID, Domain, Port}, State) ->
-	rescan_entry(Service_ID, Domain, Port),
+'SCAN'({rescan, Service_ID, Address, Port}, State) ->
+	rescan_entry(Service_ID, Address, Port),
 	{stop, normal, State}.
 
 
@@ -115,38 +116,33 @@ get_sid_list() ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Scanning
-scan(ScanData) ->
-	[Domain, Port, Service_type] = persp_parser:parse_scan_data(ScanData),
-	scan(Domain, Port, Service_type).
-
-scan(Domain, Port, Service_type) ->
-	Service_ID = Domain ++ ":" ++ Port ++ "," ++ Service_type,
-	IntegerPort = list_to_integer(Port),
+scan({Address, Port, Service_type}) ->
+	Service_ID = Address ++ ":" ++ integer_to_list(Port) ++ "," ++ Service_type,
 	
 	case check_cache(Service_ID) of
 		[] ->
-			Result = new_scan(Service_ID, Domain, IntegerPort),
+			Result = new_scan(Service_ID, Address, Port),
 			
 			{ok, Service_ID, [Result]};
 		Results ->
 			{ok, Service_ID, Results}
 	end.
 
-new_scan(Service_ID, Domain, Port) ->
-	{ok, Fingerprint} = get_fingerprint(Domain, Port),
+new_scan(Service_ID, Address, Port) ->
+	{ok, Fingerprint} = get_fingerprint(Address, Port),
 	Timestamp = time_now(),
 	add_entry(Service_ID, Fingerprint, Timestamp),
 	
 	{Fingerprint, [{Timestamp, Timestamp}]}.
 
-rescan_entry(Service_ID, Domain, Port) ->
-	{ok, Fingerprint} = get_fingerprint(Domain, Port),
+rescan_entry(Service_ID, Address, Port) ->
+	{ok, Fingerprint} = get_fingerprint(Address, Port),
 	Timestamp = time_now(),
 	
 	merge_entry(Service_ID, Fingerprint, Timestamp).
 
-get_fingerprint(Domain, Port) ->
-	case ssl:connect(Domain, Port, ?SOCKET_OPTS) of
+get_fingerprint(Address, Port) ->
+	case ssl:connect(Address, Port, ?SOCKET_OPTS) of
 		{ok, Socket} ->
 			{ok, Certificate} = ssl:peercert(Socket),
 			KeyFingerprint = crypto:md5(Certificate),
@@ -156,7 +152,7 @@ get_fingerprint(Domain, Port) ->
 			{ok, KeyFingerprint};
 		{error, Reason} ->
 			error_logger:error_msg("Failed to connect to ~p:~p - ~p\n",
-								   [Domain, Port, Reason]),
+								   [Address, Port, Reason]),
 			{error, Reason}
 	end.
 
@@ -164,10 +160,9 @@ get_fingerprint(Domain, Port) ->
 % TODO: there should be a way to control how many of these go off simultaneously
 scan_list(SIDList) ->
 	Lambda = fun(CurrentSID) ->
-		{ok, Pid} = persp_scanner_sup:get_scanner(),
-		[Domain, Port, _Service_type] = string:tokens(CurrentSID, ":,"),
-		IntPort = list_to_integer(Port),
-		rescan(Pid, CurrentSID, Domain, IntPort)
+		{ok, Pid} = persp_scanner_sup:get_ssl_scanner(),
+		{Address, Port, _} = persp_parser:parse_sid_list(CurrentSID),
+		rescan(Pid, CurrentSID, Address, Port)
 	end,
 	
 	lists:foreach(Lambda, SIDList).

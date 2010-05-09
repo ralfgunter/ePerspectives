@@ -52,8 +52,7 @@ loop(Socket, Module) ->
 		{ok, {Address, Port, Data}} ->
 			ScanData = #scan_data{socket = Socket, address = Address,
 								  port = Port, data = Data},
-			{ok, Pid} = persp_scanner_sup:get_scanner(),
-			Module:start_scan(Pid, ScanData),
+			persp_scanner_sup:dispatch_scanner(ScanData),
 			loop(Socket, Module);
 		{error, Reason} ->
 			error_logger:error_msg("Error receiving data: ~p\n", [Reason]),

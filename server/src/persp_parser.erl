@@ -10,7 +10,8 @@
 
 -define(SIG_LEN, 172).
 
--export([parse_scan_data/1, prepare_response/2]).
+-export([parse_scan_data/1, parse_sid_list/1]).
+-export([prepare_response/2]).
 
 -record(scan_data, {socket, address, port, data}).
 
@@ -22,11 +23,17 @@ parse_scan_data(ScanData) ->
 	
 	parse_sid_bin(SIDBin).
 
+parse_sid_list(SIDList) ->
+	% Here the last element of the list is a NULL, which must be removed in
+	% this module, because all other modules using it assume it's not there.
+	[Address, StrPort, [Service_type | _NULL]] = string:tokens(SIDList, ":,"),
+	
+	{Address, list_to_integer(StrPort), [Service_type]}.
+
 parse_sid_bin(SIDBin) ->
 	SIDList = binary_to_list(SIDBin),
-	ParsedSID = string:tokens(SIDList, ":,"),
 	
-	ParsedSID.
+	parse_sid_list(SIDList).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Preparing the response to a scan request
