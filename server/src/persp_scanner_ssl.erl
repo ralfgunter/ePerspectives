@@ -6,11 +6,10 @@
 %%% terms of this license. You must not remove this notice, or any other, from
 %%% this software.
 
--module(persp_scanner_fsm).
+-module(persp_scanner_ssl).
 -behaviour(gen_fsm).
 
 -define(UNIX_EPOCH, 62167219200).
--define(SIG_LEN, 172).
 -define(SCAN_TIMEOUT, 5000).
 -define(SOCKET_OPTS, [binary, {reuseaddr, true}, {active, false}]).
 
@@ -78,7 +77,7 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 'SCAN'({start_scan, ScanData}, State) ->
 	case scan(ScanData) of
 		{ok, Service_ID, Results} ->
-			BinResponse = prepare_response(Service_ID, Results),
+			BinResponse = persp_parser:prepare_response(Service_ID, Results),
 			send_results(ScanData, BinResponse);
 		{error, Reason} ->
 			error_logger:error_msg("Scan failed: ~p\n", [Reason])
@@ -95,56 +94,6 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %% Internal API
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Parsing
-parse_scan_data(ScanData) ->
-	<< _:80, SIDBin/binary >> = ScanData#scan_data.data,
-	
-	parse_sid_bin(SIDBin).
-
-parse_sid_bin(SIDBin) ->
-	SIDList = binary_to_list(SIDBin),
-	ParsedSID = string:tokens(SIDList, ":,"),
-	
-	ParsedSID.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Preparing the response to a scan request
-prepare_response(Service_ID, List) ->
-	Num_entries = length(List),
-	prepare_response(Service_ID, List, << Num_entries:16, 16:16, 3:8 >>).
-
-% This is called when we're done parsing all {fingerprint, timestamps} entries
-prepare_response(Service_ID, [], Key_info) ->
-	Name_len  = length(Service_ID),
-	Total_len = 10 + Name_len + byte_size(Key_info) + ?SIG_LEN,
-	
-	% TODO: signature length should be customizable - keyserver.
-	Header = << 1:8, 3:8, Total_len:16, 9:16, Name_len:16, ?SIG_LEN:16 >>,
-	
-	SIDBin = list_to_binary(Service_ID),
-	Signature = sign(Key_info, SIDBin),
-	
-	<< Header/binary, SIDBin/binary, Key_info/binary, Signature/binary >>;
-
-% This is called once per fingerprint
-prepare_response(Service_ID, [CurrentEntry | Rest], Results) ->
-	{Fingerprint, Timestamps} = CurrentEntry,
-	
-	BinTimestamps = prepare_timestamps(Timestamps),
-	Data = << Fingerprint/binary, BinTimestamps/binary >>,
-	
-	prepare_response(Service_ID, Rest, << Results/binary, Data/binary >>).
-
-prepare_timestamps(Timestamps) ->
-	Lambda = fun(CurrentTimestamp, ResultSoFar) ->
-		{Timestamp_beg, Timestamp_end} = CurrentTimestamp,
-		
-		<< ResultSoFar/binary, Timestamp_beg:32, Timestamp_end:32 >>
-	end,
-	
-	lists:foldl(Lambda, <<>>, Timestamps).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database access
@@ -167,7 +116,7 @@ get_sid_list() ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Scanning
 scan(ScanData) ->
-	[Domain, Port, Service_type] = parse_scan_data(ScanData),
+	[Domain, Port, Service_type] = persp_parser:parse_scan_data(ScanData),
 	scan(Domain, Port, Service_type).
 
 scan(Domain, Port, Service_type) ->
@@ -222,17 +171,6 @@ scan_list(SIDList) ->
 	end,
 	
 	lists:foreach(Lambda, SIDList).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Signing
-sign(Key_info, SIDBin) ->
-	Data = << SIDBin/binary, Key_info/binary >>,
-	Signature = sign_data(Data),
-	
-	Signature.
-
-sign_data(Data) ->
-	key_sup:sign(Data).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Misc

@@ -29,7 +29,7 @@ start(_Type, _Args) ->
 	crypto:start(),
 	ssl:start(),
 	Port = get_app_env(listen_port, ?DEF_PORT),
-	supervisor:start_link({local, ?MODULE}, ?MODULE, [Port, persp_scanner_fsm]).
+	supervisor:start_link({local, ?MODULE}, ?MODULE, [Port, persp_scanner_ssl]).
 
 stop(_S) ->
 	ok.
