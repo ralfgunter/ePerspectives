@@ -17,7 +17,7 @@
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 parse_messages(Results_List) ->
-    ParsedList = lists:foldl(fun parse_result/2, [], Results_List),
+    ParsedList = lists:map(fun parse_result/1, Results_List),
     
     {ok, ParsedList}.
 
@@ -27,10 +27,8 @@ parse_messages(Results_List) ->
 %% Internal API
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-parse_result({udp, Result}, ParsedSoFar) ->
-    ParsedResult = persp_udp_parser:parse_server_result(Result),
-    [{udp, ParsedResult} | ParsedSoFar];
+parse_result({udp, Result}) ->
+    {udp, persp_udp_parser:parse_server_result(Result)};
 
-parse_result({http, Result}, ParsedSoFar) ->
-    ParsedResult = persp_http_parser:parse_server_result(Result),
-    [{http, ParsedResult} | ParsedSoFar].
+parse_result({http, Result}) ->
+    {http, persp_http_parser:parse_server_result(Result)}.

@@ -22,6 +22,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init([]) ->
     crypto:start(),     % There must be a better way to do this
+    inets:start(),
     Servers = [],
     ParsedResults = [],
     RawResults = [],
@@ -56,7 +57,7 @@ handle_call({add_server, ServerHeader}, _From, {Servers, Results}) ->
     {reply, Response, {NewServers, Results}};
 
 handle_call({del_server, Address}, _From, {Servers, Results}) ->
-    {Response, NewServers} = persp:add_server(Address, Servers),
+    {Response, NewServers} = persp:del_server(Address, Servers),
     
     {reply, Response, {NewServers, Results}};
 

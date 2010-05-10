@@ -58,15 +58,16 @@ del_server(Address, Servers) ->
 scan(ScanHeader, Servers) ->
     Packet = prepare_header(build_sidbin(ScanHeader)),
     
-    Lambda = fun(Server, Results) ->
-        [raw_scan(Packet, Server) | Results]
+    Lambda = fun(Server) ->
+        raw_scan({ScanHeader, Packet}, Server)
     end,
-    Results = lists:foldl(Lambda, [], Servers),
+    Results = lists:map(Lambda, Servers),
     
     {ok, Results}.
 
 
-raw_scan(Packet, {ServAddress, ServPort, Public_Key, udp}) ->
+%% UDP
+raw_scan({_ScanHeader, Packet}, {ServAddress, ServPort, Public_Key, udp}) ->
     {ok, Socket} = gen_udp:open(?DEFAULT_PORT, ?UDP_OPTIONS),
     gen_udp:send(Socket, ServAddress, ServPort, Packet),
     Response = gen_udp:recv(Socket, ?MAX_PACKET_LEN, ?TIMEOUT),
@@ -75,6 +76,21 @@ raw_scan(Packet, {ServAddress, ServPort, Public_Key, udp}) ->
     case Response of
         {ok, {_Address, _Port, Data}} ->
             {udp, {ServAddress, ServPort, Public_Key, Data}};
+        {error, Reason} ->
+            {udp, {error, Reason, ServAddress}}
+    end;
+
+%% HTTP
+raw_scan({ScanHeader, _Packet}, {ServAddress, ServPort, Public_Key, http}) ->
+    {ScanAddress, ScanPort, Service_type} = ScanHeader,
+    ScanURL = "http://" ++ ServAddress  ++ ":" ++ integer_to_list(ServPort) ++
+              "/?host=" ++ ScanAddress  ++ "&" ++ "port=" ++
+              integer_to_list(ScanPort) ++ "&" ++ "service_type=" ++
+              integer_to_list(Service_type) ++ "&HTTP/1.1",
+    
+    case http:request(ScanURL) of
+        {ok, {{_, 200, _}, _, Data}} ->
+            {http, {ServAddress, ServPort, Public_Key, Data}};
         {error, Reason} ->
             {udp, {error, Reason, ServAddress}}
     end.
