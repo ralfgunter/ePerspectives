@@ -24,8 +24,8 @@
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link(Interval_length, ScannerList) ->
-	gen_server:start_link({local, ?MODULE}, ?MODULE,
-							[Interval_length, ScannerList], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE,
+                            [Interval_length, ScannerList], []).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -34,23 +34,23 @@ start_link(Interval_length, ScannerList) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init([Interval_length, ScannerList]) ->
-	case prepare_timers(Interval_length, ScannerList) of
-		{ok, TimerRefs} ->
-			{ok, TimerRefs};
-		{error, Reason} ->
-			error_logger:error_msg("Failed to setup timers: ~p\n", [Reason]),
-			{error, Reason}
-	end.
+    case prepare_timers(Interval_length, ScannerList) of
+        {ok, TimerRefs} ->
+            {ok, TimerRefs};
+        {error, Reason} ->
+            error_logger:error_msg("Failed to setup timers: ~p\n", [Reason]),
+            {error, Reason}
+    end.
 
 terminate(_Reason, TimerRefs) ->
-	delete_timers(TimerRefs),
-	ok.
+    delete_timers(TimerRefs),
+    ok.
 
 code_change(_OldVersion, TimerRefs, _Extra) ->
-	{ok, TimerRefs}.
+    {ok, TimerRefs}.
 
 handle_call(_Msg, _From, TimerRefs) ->
-	{noreply, TimerRefs}.
+    {noreply, TimerRefs}.
 
 handle_cast(_Msg, TimerRefs) ->
     {noreply, TimerRefs}.
@@ -65,18 +65,18 @@ handle_info(_Info, TimerRefs) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 prepare_timers(Interval, ScannerList) ->
-	prepare_timers(Interval, ScannerList, []).
+    prepare_timers(Interval, ScannerList, []).
 
 prepare_timers(_Interval, [], TimerRefs) ->
-	{ok, TimerRefs};
+    {ok, TimerRefs};
 
 prepare_timers(Interval, [CurrentScanner | Rest], TimerRefs) ->
-	case timer:apply_interval(Interval, CurrentScanner, rescan_all, []) of
-		{ok, TRef} ->
-			prepare_timers(Interval, Rest, [{CurrentScanner, TRef} | TimerRefs]);
-		{error, Reason} ->
-			{error, Reason}
-	end.
+    case timer:apply_interval(Interval, CurrentScanner, rescan_all, []) of
+        {ok, TRef} ->
+            prepare_timers(Interval, Rest, [{CurrentScanner, TRef} | TimerRefs]);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 delete_timers(TimerList) ->
-	lists:foreach(fun(Ref) -> timer:cancel(Ref) end, TimerList).
+    lists:foreach(fun(Ref) -> timer:cancel(Ref) end, TimerList).

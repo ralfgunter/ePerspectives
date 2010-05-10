@@ -9,49 +9,68 @@
 -module(persp_gs).
 -behaviour(gen_server).
 
--include("persp.hrl").
-
-%% gen_server exports
--export([init/1, terminate/2, code_change/3]).
+%% gen_server callbacks
+-export([init/1, terminate/2]).
 -export([handle_call/3, handle_cast/2, handle_info/2]).
+-export([code_change/3]).
 
-%% gen_server initialization
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% gen_server callbacks
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init([]) ->
-	crypto:start(),		% There must be a better way to do this
-	Servers = [],
-	ParsedResults = [],
-	BinaryResults = [],
-	Results = {BinaryResults, ParsedResults},
-	{ok, {Servers, Results}}.
+    crypto:start(),     % There must be a better way to do this
+    Servers = [],
+    ParsedResults = [],
+    RawResults = [],
+    Results = {RawResults, ParsedResults},
+    
+    {ok, {Servers, Results}}.
+
+handle_cast(_Message, State) ->
+    {noreply, State}.
+
+handle_info(_Message, State) ->
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVersion, State, _Extra) ->
+    {ok, State}.
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
 %% Call handling
-handle_call({add_server, IP, Port, Public_Key}, _From, {Servers, Results}) ->
-	{Response, NewServers} = persp:add_server(IP, Port, Public_Key, Servers),
-	{reply, Response, {NewServers, Results}};
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-handle_call({del_server, IP}, _From, {Servers, Results}) ->
-	{Response, NewServers} = persp:add_server(IP, Servers),
-	{reply, Response, {NewServers, Results}};
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Adding and deleting notary servers
+handle_call({add_server, ServerHeader}, _From, {Servers, Results}) ->
+    {Response, NewServers} = persp:add_server(ServerHeader, Servers),
+    
+    {reply, Response, {NewServers, Results}};
 
-handle_call({scan_service_id, Service_ID}, _From, {Servers, Results}) ->
-	{ok, Socket} = gen_udp:open(?DEFAULT_PORT, ?UDP_OPTIONS),
-	{ok, NewBinaryResults} = persp:scan_service_id(Service_ID, Servers, Socket),
-	ok = gen_udp:close(Socket),
-	
-	{_BinaryResults, ParsedResults} = Results,
-	
-	{reply, ok, {Servers, {NewBinaryResults, ParsedResults}}};
+handle_call({del_server, Address}, _From, {Servers, Results}) ->
+    {Response, NewServers} = persp:add_server(Address, Servers),
+    
+    {reply, Response, {NewServers, Results}};
 
-handle_call(print, _From, {Servers, {BinaryResults, _ParsedResults}}) ->
-	{ok, ParsedList} = persp_parser:parse_messages(BinaryResults),
-	persp:pretty_print(ParsedList),
-	
-	{reply, ok, {Servers, {BinaryResults, ParsedList}}}.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Fetching and printing scan results
+handle_call({scan, ScanHeader}, _From, {Servers, Results}) ->
+    {ok, NewRawResults} = persp:scan(ScanHeader, Servers),
+    {_, ParsedResults}  = Results,
+    
+    {reply, ok, {Servers, {NewRawResults, ParsedResults}}};
 
-
-%% Required gen_server 'definitions'
-handle_cast(_Message, State) -> {noreply, State}.
-handle_info(_Message, State) -> {noreply, State}.
-terminate(_Reason, _State) -> ok.
-code_change(_OldVersion, State, _Extra) -> {ok, State}.
+handle_call(print, _From, {Servers, {RawResults, _ParsedResults}}) ->
+    % TODO: properly cache the parsed messages
+    {ok, ParsedList} = persp_parser:parse_messages(RawResults),
+    persp:pretty_print(ParsedList),
+    
+    {reply, ok, {Servers, {RawResults, ParsedList}}}.

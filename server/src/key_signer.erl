@@ -26,7 +26,7 @@
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link(KeyTuple) ->
-	gen_server:start_link(?MODULE, KeyTuple, []).
+    gen_server:start_link(?MODULE, KeyTuple, []).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -34,13 +34,13 @@ start_link(KeyTuple) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init(KeyTuple) ->
-	{ok, KeyTuple}.
+    {ok, KeyTuple}.
 
 terminate(_Reason, _KeyTuple) ->
-	ok.
+    ok.
 
 code_change(_OldVersion, KeyTuple, _Extra) ->
-	{ok, KeyTuple}.
+    {ok, KeyTuple}.
 
 handle_cast(_Msg, KeyTuple) ->
     {noreply, KeyTuple}.
@@ -55,9 +55,9 @@ handle_info(_Info, KeyTuple) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call({sign, Data}, _From, KeyTuple) ->
-	{ok, Signature} = sign(Data, KeyTuple),
-	
-	{reply, Signature, KeyTuple}.
+    {ok, Signature} = sign(Data, KeyTuple),
+    
+    {reply, Signature, KeyTuple}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -66,9 +66,9 @@ handle_call({sign, Data}, _From, KeyTuple) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 sign(Data, {Mp_priv_exp, Mp_pub_exp, Mp_mod}) ->
-	% TODO: make DigestType customizable
-	Mp_data = << (byte_size(Data)):32/integer-big, Data/binary >>,
-	Signature = crypto:rsa_sign(md5, Mp_data,
-								[Mp_pub_exp, Mp_mod, Mp_priv_exp]),
-	
-	{ok, Signature}.
+    % TODO: make DigestType customizable
+    Mp_data = << (byte_size(Data)):32/integer-big, Data/binary >>,
+    Signature = crypto:rsa_sign(md5, Mp_data,
+                                [Mp_pub_exp, Mp_mod, Mp_priv_exp]),
+    
+    {ok, Signature}.

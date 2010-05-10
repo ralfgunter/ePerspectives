@@ -26,13 +26,13 @@
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start(_Type, _Args) ->
-	crypto:start(),
-	ssl:start(),
-	Port = get_app_env(listen_port, ?DEF_PORT),
-	supervisor:start_link({local, ?MODULE}, ?MODULE, [Port, persp_scanner_ssl]).
+    crypto:start(),
+    ssl:start(),
+    Port = get_app_env(listen_port, ?DEF_PORT),
+    supervisor:start_link({local, ?MODULE}, ?MODULE, [Port, persp_scanner_ssl]).
 
 stop(_S) ->
-	ok.
+    ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -52,30 +52,30 @@ init([Port, ScannerModule]) ->
                   worker,
                   [udp_listener]
               },
-			  % Server that requests rescans
-			  {   rescan_serv,
-			      {rescan_server, start_link, [?DEF_RESCAN_PERIOD, [ScannerModule]]},
-				  permanent,
-				  2000,
-				  worker,
-				  [rescan_server]
-			  },
-			  % DB server (caches the scan results)
-			  {   db_serv,
-			      {db_server_dets, start_link, ["../db/cache", "../db/sids"]},
-				  permanent,
-				  2000,
-				  worker,
-				  []
-			  },
-			  % Key signing supervisor
-			  {   key_serv,
-			      {key_sup, start_link, ["../keys/private.pem", basic]},
-				  permanent,
-				  infinity,
-				  supervisor,
-				  []
-			  },
+              % Server that requests rescans
+              {   rescan_serv,
+                  {rescan_server, start_link, [?DEF_RESCAN_PERIOD, [ScannerModule]]},
+                  permanent,
+                  2000,
+                  worker,
+                  [rescan_server]
+              },
+              % DB server (caches the scan results)
+              {   db_serv,
+                  {db_server_dets, start_link, ["../db/cache", "../db/sids"]},
+                  permanent,
+                  2000,
+                  worker,
+                  []
+              },
+              % Key signing supervisor
+              {   key_serv,
+                  {key_sup, start_link, ["../keys/private.pem", basic]},
+                  permanent,
+                  infinity,
+                  supervisor,
+                  []
+              },
               % Scanner instance supervisor
               {   scanner_sup,
                   {persp_scanner_sup, start_link, [ScannerModule, basic]},
@@ -94,14 +94,14 @@ init([Port, ScannerModule]) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 get_app_env(Opt, Default) ->
-	case application:get_env(application:get_application(), Opt) of
-		{ok, Val} ->
-			Val;
-		_ ->
-			case init:get_argument(Opt) of
-				[[Val | _]] ->
-					Val;
-				error ->
-					Default
-			end
-	end.
+    case application:get_env(application:get_application(), Opt) of
+        {ok, Val} ->
+            Val;
+        _ ->
+            case init:get_argument(Opt) of
+                [[Val | _]] ->
+                    Val;
+                error ->
+                    Default
+            end
+    end.

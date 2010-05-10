@@ -31,41 +31,41 @@
 %% @end
 %%----------------------------------------------------------------------
 start_link(Port, Module) when is_integer(Port), is_atom(Module) ->
-	gen_server:start_link({local, ?MODULE}, ?MODULE, {Port, Module}, []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, {Port, Module}, []).
 
 %%%------------------------------------------------------------------------
 %%% Callback functions from gen_server
 %%%------------------------------------------------------------------------
 
 init({Port, Module}) ->
-	case gen_udp:open(Port, ?UDP_OPTIONS) of
-		{ok, Socket} ->
-			process_flag(trap_exit, true),
-			proc_lib:init_ack({ok, self()}),
-			loop(Socket, Module);
-		{error, Reason} ->
-			{stop, Reason}
-	end.
+    case gen_udp:open(Port, ?UDP_OPTIONS) of
+        {ok, Socket} ->
+            process_flag(trap_exit, true),
+            proc_lib:init_ack({ok, self()}),
+            loop(Socket, Module);
+        {error, Reason} ->
+            {stop, Reason}
+    end.
 
 loop(Socket, Module) ->
-	case gen_udp:recv(Socket, ?MAX_LENGTH) of
-		{ok, {Address, Port, Data}} ->
-			ScanData = #scan_data{socket = Socket, address = Address,
-								  port = Port, data = Data},
-			persp_scanner_sup:dispatch_scanner(ScanData),
-			loop(Socket, Module);
-		{error, Reason} ->
-			error_logger:error_msg("Error receiving data: ~p\n", [Reason]),
-			loop(Socket, Module)
-	end.
+    case gen_udp:recv(Socket, ?MAX_LENGTH) of
+        {ok, {Address, Port, Data}} ->
+            ScanData = #scan_data{socket = Socket, address = Address,
+                                  port = Port, data = Data},
+            persp_scanner_sup:dispatch_scanner(ScanData),
+            loop(Socket, Module);
+        {error, Reason} ->
+            error_logger:error_msg("Error receiving data: ~p\n", [Reason]),
+            loop(Socket, Module)
+    end.
 
 % TODO: this will never be executed - fix it
 terminate(_Reason, State) ->
-	gen_udp:close(State#state.socket),
-	ok.
+    gen_udp:close(State#state.socket),
+    ok.
 
 code_change(_OldVersion, State, _Extra) ->
-	{ok, State}.
+    {ok, State}.
 
 handle_call(Request, _From, State) ->
     {stop, {unknown_call, Request}, State}.
