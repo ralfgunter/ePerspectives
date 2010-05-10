@@ -16,16 +16,16 @@ Calling <b>make</b> without arguments will compile the entire suite (client + se
 
 =Usage - CLIENT
 
-Note: since this software is very early in development, I cannot guarantee that the API will remain the same.
+Note: since this software is early in development, I cannot guarantee that the API will remain the same.
 
 User interaction is done through the <b>persp_interface</b> module:
 * Function_name/Arity - [Arguments]: Description
-* start/0 - []: spawns a "blank" persp_client instance, and is required before any of the other functions below;
-* scan_service_id/1 - ["DOMAIN:PORT,TYPE"]: requests a scan from the notary servers; currently, TYPE can only be 2 (it means https);
-* scan/3 - [Domain, Port, Type]: same as above (Domain is a string; port and type are integers);
+* start/0 - []: spawns a persp_client instance, and is required before any of the other functions below;
+* scan/3 - [Domain, Port, Type]: requests a scan from the notary servers; currently, Type can only be 2 (it means ssl);
 * print/0 - []: prints the scan results that have already been received;
-* add_server/3 - [IP, Port, Public_Key]: adds a notary server to the servers list;
-* del_server/1 - [IP]: deletes a notary server from the servers list
+* add_server/4 - [IP, Port, Public_Key, Server_type]: adds a notary server to the servers list (Server_type can only be udp for now);
+* del_server/1 - [IP]: deletes a notary server from the servers list;
+* pubkey_pem_to_string/1 - [Filepath]: returns a string containing the pem-encoded public key.
 
 =Usage - SERVER/SCANNER
 
