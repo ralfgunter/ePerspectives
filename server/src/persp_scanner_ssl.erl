@@ -151,7 +151,7 @@ get_fingerprint(Address, Port) ->
             
             ssl:close(Socket),
             
-            {ok, binary_to_readable_string(KeyFingerprint)};
+            {ok, KeyFingerprint};
         {error, Reason} ->
             error_logger:error_msg("Failed to connect to ~w:~w - ~p\n",
                                    [Address, Port, Reason]),
@@ -187,10 +187,3 @@ send_results(ScanData, Results) ->
         {error, Reason} ->
             error_logger:error_msg("Failed to send results: ~p\n", [Reason])
     end.
-
-% TODO: put it in another module
-binary_to_readable_string(Bin) ->
-    HexList = lists:map(fun(N) -> httpd_util:integer_to_hexlist(N) end,
-                        binary_to_list(Bin)),
-    
-    string:join(HexList, ":").

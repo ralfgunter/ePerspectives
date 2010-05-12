@@ -63,7 +63,11 @@ handle_request(udp, ScanData) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% HTTP
 handle_request(http, ScanInfo) ->
-    {_, _, Service_type} = ScanInfo,
+    {Address, Port, Service_type} = ScanInfo,
+    % TODO: this doesn't seem right; investigate.
+    SID = Address ++ ":" ++ integer_to_list(Port) ++ ","
+                         ++ integer_to_list(Service_type),
+    
     
     % TODO: perhaps this should be fetched from an ets table, which in turn
     %       is loaded from a config file.
@@ -74,7 +78,7 @@ handle_request(http, ScanInfo) ->
             
             receive
                 {ok, _Service_ID, Results} ->
-                    persp_http_parser:prepare_response(Results)
+                    persp_http_parser:prepare_response(SID, Results)
                 % TODO: handle scan error as well
             end
     end.
