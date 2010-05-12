@@ -10,7 +10,7 @@
 -behaviour(supervisor).
 
 %% External API
--export([dispatch_scanner/1]).
+-export([handle_request/2]).
 -export([get_ssl_scanner/0]).
 
 %% Supervisor behaviour callbacks
@@ -23,16 +23,34 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
-%% External API
+%% Scan request handling
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-dispatch_scanner(ScanData) ->
+
+%% Requests that are made via UDP are handled differently from those
+%% made via HTTP:
+%%
+%% UDP:  - The listener merely receives scan requests and dispatches scanners
+%%         to handle them; it assumes that the results will be sent by someone
+%%         else.
+%%       - The reason for this is that the listener CANNOT block on the scan,
+%%         since that would delay dispatching other requests.
+%%
+%% HTTP: - The listener not only receives requests but also sees to it that they
+%%         are replied to, thanks to inets' ability to spawn a new process for
+%%         each "HTTP request".
+%%       - Unlike above, the process spawned by the httpd CAN (and perhaps even
+%%         should) block on the scan, since it only affects that single request.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% UDP
+handle_request(udp, ScanData) ->
     % TODO: come up with better names for ScanInfo and ScanData
     % ScanInfo: {Address, Port, Service_type}
     %           - information about the server
     % ScanData: {ClientSocket, ClientAddress, ClientPort, ClientData}
     %           - information about the client (plus the scan request it sent)
-    ScanInfo = {_, _, Service_type} = persp_parser:parse_scan_data(ScanData),
+    ScanInfo = {_, _, Service_type} = persp_udp_parser:parse_scandata(ScanData),
     
     % TODO: perhaps this should be fetched from an ets table, which in turn
     %       is loaded from a config file.
@@ -40,8 +58,26 @@ dispatch_scanner(ScanData) ->
         "2" ->
             {ok, Pid} = get_ssl_scanner(),
             persp_scanner_ssl:start_scan(Pid, {ScanInfo, ScanData})
-    end.
+    end;
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% HTTP
+handle_request(http, ScanInfo) ->
+    {_, _, Service_type} = ScanInfo,
+    
+    % TODO: perhaps this should be fetched from an ets table, which in turn
+    %       is loaded from a config file.
+    case Service_type of
+        2 ->
+            {ok, Pid} = get_ssl_scanner(),
+            persp_scanner_ssl:start_scan(Pid, {self(), ScanInfo}),
+            
+            receive
+                {ok, _Service_ID, Results} ->
+                    persp_http_parser:prepare_response(Results)
+                % TODO: handle scan error as well
+            end
+    end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -49,6 +85,8 @@ dispatch_scanner(ScanData) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link(ScannerModule, basic) ->
+    crypto:start(),
+    ssl:start(),
     supervisor:start_link({local, ?MODULE}, ?MODULE, [ScannerModule]).
 
 init([ScannerModule]) ->

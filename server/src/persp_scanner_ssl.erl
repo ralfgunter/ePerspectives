@@ -75,13 +75,15 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %% FSM States
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-'SCAN'({start_scan, {ScanInfo, ScanData}}, State) ->
+'SCAN'({start_scan, {ReplyTo, ScanInfo}}, State) ->
     case scan(ScanInfo) of
         {ok, Service_ID, Results} ->
-            BinResponse = persp_parser:prepare_response(Service_ID, Results),
-            send_results(ScanData, BinResponse);
+            ReplyTo ! {ok, Service_ID, Results};
+            %BinResponse = persp_parser:prepare_response(Service_ID, Results),
+            %send_results(ScanData, BinResponse);
         {error, Reason} ->
-            error_logger:error_msg("Scan failed: ~p\n", [Reason])
+            error_logger:error_msg("Scan failed: ~p\n", [Reason]),
+            ReplyTo ! {error, Reason}
     end,
     {stop, normal, State};
 
@@ -149,9 +151,9 @@ get_fingerprint(Address, Port) ->
             
             ssl:close(Socket),
             
-            {ok, KeyFingerprint};
+            {ok, binary_to_readable_string(KeyFingerprint)};
         {error, Reason} ->
-            error_logger:error_msg("Failed to connect to ~p:~p - ~p\n",
+            error_logger:error_msg("Failed to connect to ~w:~w - ~p\n",
                                    [Address, Port, Reason]),
             {error, Reason}
     end.
@@ -159,13 +161,12 @@ get_fingerprint(Address, Port) ->
 % This spawns a new scanner for each element in the list
 % TODO: there should be a way to control how many of these go off simultaneously
 scan_list(SIDList) ->
-    Lambda = fun(CurrentSID) ->
-        {ok, Pid} = persp_scanner_sup:get_ssl_scanner(),
-        {Address, Port, _} = persp_parser:parse_sid_list(CurrentSID),
-        rescan(Pid, CurrentSID, Address, Port)
-    end,
-    
-    lists:foreach(Lambda, SIDList).
+    lists:foreach(fun rescan_sid/1, SIDList).
+
+rescan_sid(Service_ID) ->
+    {ok, Pid} = persp_scanner_sup:get_ssl_scanner(),
+    {Address, Port, _} = persp_parser:parse_sid_list(Service_ID),
+    rescan(Pid, Service_ID, Address, Port).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Misc
@@ -186,3 +187,10 @@ send_results(ScanData, Results) ->
         {error, Reason} ->
             error_logger:error_msg("Failed to send results: ~p\n", [Reason])
     end.
+
+% TODO: put it in another module
+binary_to_readable_string(Bin) ->
+    HexList = lists:map(fun(N) -> httpd_util:integer_to_hexlist(N) end,
+                        binary_to_list(Bin)),
+    
+    string:join(HexList, ":").

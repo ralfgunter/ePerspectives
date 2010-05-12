@@ -14,7 +14,8 @@
 
 -define(MAX_RESTART,     5).
 -define(MAX_TIME,       60).
--define(DEF_PORT,    15217).
+-define(DEF_PORT,     8080).
+-define(DEF_BINDADDR, {127,0,0,1}).
 
 % Rescans all database entries every 24 hours
 -define(DEF_RESCAN_PERIOD, (24 * 3600 * 1000)).
@@ -26,10 +27,7 @@
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start(_Type, _Args) ->
-    crypto:start(),
-    ssl:start(),
-    Port = get_app_env(listen_port, ?DEF_PORT),
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [Port, persp_scanner_ssl]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, [persp_scanner_ssl]).
 
 stop(_S) ->
     ok.
@@ -40,17 +38,25 @@ stop(_S) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-init([Port, ScannerModule]) ->
+init([ScannerModule]) ->
     {ok,
         {_SupFlags = {one_for_one, ?MAX_RESTART, ?MAX_TIME},
             [
               % UDP Listener
-              {   udp_listen,
-                  {udp_listener, start_link, [Port, ScannerModule]},
+              %{   udp_listen,
+              %    {udp_listener, start_link, [Port]},
+              %    permanent,
+              %    2000,
+              %    worker,
+              %    [udp_listener]
+              %},
+              % HTTP Listener
+              {   http_listen,
+                  {persp_http_listener, start_link, [?DEF_BINDADDR, ?DEF_PORT]},
                   permanent,
                   2000,
                   worker,
-                  [udp_listener]
+                  [persp_http_listener]
               },
               % Server that requests rescans
               {   rescan_serv,
@@ -87,21 +93,3 @@ init([Port, ScannerModule]) ->
             ]
         }
     }.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%
-%% Internal functions
-%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-get_app_env(Opt, Default) ->
-    case application:get_env(application:get_application(), Opt) of
-        {ok, Val} ->
-            Val;
-        _ ->
-            case init:get_argument(Opt) of
-                [[Val | _]] ->
-                    Val;
-                error ->
-                    Default
-            end
-    end.

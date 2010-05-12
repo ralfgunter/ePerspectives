@@ -41,28 +41,22 @@ parse_server_result({Address, _Port, PKey, Data}) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Parsing keys
 parse_keys(KeyList) ->
-    parse_individual_keys(KeyList, []).
+    lists:map(fun parse_individual_keys/1, KeyList).
 
-parse_individual_keys([], Results) ->
-    Results;
-
-parse_individual_keys([Key | Rest], Results) ->
+parse_individual_keys(Key) ->
     Fingerprint = (hd(xmerl_xpath:string("@fp", Key)))#xmlAttribute.value,
     Timestamps = xmerl_xpath:string("/key/timestamp", Key),
     ParsedTimestamps = parse_timestamps(Timestamps),
     
-    parse_individual_keys(Rest, [{Fingerprint, ParsedTimestamps} | Results]).
+    {Fingerprint, ParsedTimestamps}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Parsing timestamps
 parse_timestamps(TimestampsInfo) ->
-    parse_individual_timestamps(TimestampsInfo, []).
+    lists:map(fun parse_individual_timestamps/1, TimestampsInfo).
 
-parse_individual_timestamps([], Results) ->
-    Results;
-
-parse_individual_timestamps([Timestamp | Rest], Results) ->
+parse_individual_timestamps(Timestamp) ->
     Begin = (hd(xmerl_xpath:string("@start", Timestamp)))#xmlAttribute.value,
     End   = (hd(xmerl_xpath:string("@end",   Timestamp)))#xmlAttribute.value,
     
-    parse_individual_timestamps(Rest, [{Begin, End} | Results]).
+    {Begin, End}.

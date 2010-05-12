@@ -7,10 +7,12 @@
 %%% this software.
 
 -module(persp_crypto).
+
+-include("RSA.hrl").
+
 -export([verify_rsa_signature/3]).
 -export([pem_key_to_der/1, decode_der/1, public_exp/1, modulus/1]).
 
--include ("RSA.hrl").
 
 verify_rsa_signature(Data, Signature, Public_Key) ->
 	DERBinary = pem_key_to_der(Public_Key),
