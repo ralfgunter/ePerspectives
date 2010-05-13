@@ -79,8 +79,6 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
     case scan(ScanInfo) of
         {ok, Service_ID, Results} ->
             ReplyTo ! {ok, Service_ID, Results};
-            %BinResponse = persp_parser:prepare_response(Service_ID, Results),
-            %send_results(ScanData, BinResponse);
         {error, Reason} ->
             error_logger:error_msg("Scan failed: ~p\n", [Reason]),
             ReplyTo ! {error, Reason}

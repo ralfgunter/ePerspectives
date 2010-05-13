@@ -90,7 +90,7 @@ handle_info(_Info, HTTPd_Pid) ->
 parse_request(String) ->
     case string:tokens(String, "&=") of
         ["/?host", Address, "port", Port, "service_type", SvType, "HTTP/1.1"] ->
-            {ok, {Address, list_to_integer(Port), list_to_integer(SvType)}};
+            {ok, {Address, list_to_integer(Port), SvType}};
         _MalformedRequest ->
             error_logger:error_msg("Malformed request", String),
             {error, String}

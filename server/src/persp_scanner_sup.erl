@@ -51,13 +51,14 @@ handle_request(udp, ScanData) ->
     % ScanData: {ClientSocket, ClientAddress, ClientPort, ClientData}
     %           - information about the client (plus the scan request it sent)
     ScanInfo = {_, _, Service_type} = persp_udp_parser:parse_scandata(ScanData),
+    SenderPid = spawn(persp_udp_listener, receive_and_send_results, [ScanData]),
     
     % TODO: perhaps this should be fetched from an ets table, which in turn
-    %       is loaded from a config file.
+    % is loaded from a config file.
     case Service_type of
         "2" ->
             {ok, Pid} = get_ssl_scanner(),
-            persp_scanner_ssl:start_scan(Pid, {ScanInfo, ScanData})
+            persp_scanner_ssl:start_scan(Pid, {SenderPid, ScanInfo})
     end;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -65,22 +66,21 @@ handle_request(udp, ScanData) ->
 handle_request(http, ScanInfo) ->
     {Address, Port, Service_type} = ScanInfo,
     % TODO: this doesn't seem right; investigate.
-    SID = Address ++ ":" ++ integer_to_list(Port) ++ ","
-                         ++ integer_to_list(Service_type),
+    SID = Address ++ ":" ++ integer_to_list(Port) ++ "," ++ Service_type,
     
     
     % TODO: perhaps this should be fetched from an ets table, which in turn
     %       is loaded from a config file.
     case Service_type of
-        2 ->
+        "2" ->
             {ok, Pid} = get_ssl_scanner(),
-            persp_scanner_ssl:start_scan(Pid, {self(), ScanInfo}),
-            
-            receive
-                {ok, _Service_ID, Results} ->
-                    persp_http_parser:prepare_response(SID, Results)
-                % TODO: handle scan error as well
-            end
+            persp_scanner_ssl:start_scan(Pid, {self(), ScanInfo})
+    end,
+    
+    receive
+        {ok, _Service_ID, Results} ->
+            persp_http_parser:prepare_response(SID, Results)
+        % TODO: handle scan error and timeout
     end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

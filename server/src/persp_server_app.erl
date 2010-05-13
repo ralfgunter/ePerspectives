@@ -45,7 +45,7 @@ init([ScannerModule]) ->
             [
               % UDP Listener
               {   udp_listen,
-                  {udp_listener, start_link, [?DEF_UDP_PORT]},
+                  {persp_udp_listener, start_link, [?DEF_UDP_PORT]},
                   permanent,
                   2000,
                   worker,

@@ -11,7 +11,7 @@
 
 %% External API
 -export([start_link/1]).
--export([send_results/2]).
+-export([receive_and_send_results/1]).
 
 %% gen_server callbacks
 -export([init/1, terminate/2]).
@@ -32,16 +32,12 @@
 start_link(Port) when is_integer(Port) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, Port, []).
 
-send_results(ScanData, Results) ->
-    ClientAddress = ScanData#scan_data.address,
-    ClientSocket  = ScanData#scan_data.socket,
-    ClientPort    = ScanData#scan_data.port,
-    
-    case gen_udp:send(ClientSocket, ClientAddress, ClientPort, Results) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            error_logger:error_msg("Failed to send results: ~p\n", [Reason])
+receive_and_send_results(ScanData) ->
+    receive
+        {ok, Service_ID, Results} ->
+            BinResults = persp_udp_parser:prepare_response(Service_ID, Results),
+            send_results(ScanData, BinResults)
+        % TODO: handle scan error and timeout
     end.
 
 
@@ -51,7 +47,7 @@ send_results(ScanData, Results) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init(Port) ->
-    process_flag(trap_exit, true),
+    %process_flag(trap_exit, true),
     case gen_udp:open(Port, ?UDP_OPTIONS) of
         {ok, Socket} ->
             {ok, Socket};
@@ -81,9 +77,27 @@ handle_cast(_Msg, Socket) ->
 handle_info({udp, _Socket, ClientAddress, Port, Data}, Socket) ->
     ScanData = #scan_data{socket = Socket, address = ClientAddress,
                           port   = Port,   data    = Data},
-    persp_scanner_sup:handle_request({udp, ScanData}),
+    persp_scanner_sup:handle_request(udp, ScanData),
     
     {noreply, Socket};
 
 handle_info(_Info, Socket) ->
     {noreply, Socket}.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% Internal API
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+send_results(ScanData, Results) ->
+    ClientAddress = ScanData#scan_data.address,
+    ClientSocket  = ScanData#scan_data.socket,
+    ClientPort    = ScanData#scan_data.port,
+    
+    case gen_udp:send(ClientSocket, ClientAddress, ClientPort, Results) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            error_logger:error_msg("Failed to send results: ~p\n", [Reason])
+    end.
