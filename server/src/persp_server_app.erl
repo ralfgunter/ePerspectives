@@ -12,10 +12,11 @@
 %% Application and Supervisor callbacks
 -export([start/2, stop/1, init/1]).
 
--define(MAX_RESTART,     5).
--define(MAX_TIME,       60).
--define(DEF_PORT,     8080).
--define(DEF_BINDADDR, {127,0,0,1}).
+-define(MAX_RESTART,       5).
+-define(MAX_TIME,         60).
+-define(DEF_HTTP_PORT,  8080).
+-define(DEF_UDP_PORT,  15217).
+-define(DEF_BINDADDR,  {127,0,0,1}).
 
 % Rescans all database entries every 24 hours
 -define(DEF_RESCAN_PERIOD, (24 * 3600 * 1000)).
@@ -32,27 +33,27 @@ start(_Type, _Args) ->
 stop(_S) ->
     ok.
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
 %% Supervisor behaviour callbacks
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 init([ScannerModule]) ->
     {ok,
         {_SupFlags = {one_for_one, ?MAX_RESTART, ?MAX_TIME},
             [
               % UDP Listener
-              %{   udp_listen,
-              %    {udp_listener, start_link, [Port]},
-              %    permanent,
-              %    2000,
-              %    worker,
-              %    [udp_listener]
-              %},
+              {   udp_listen,
+                  {udp_listener, start_link, [?DEF_UDP_PORT]},
+                  permanent,
+                  2000,
+                  worker,
+                  [persp_udp_listener]
+              },
               % HTTP Listener
               {   http_listen,
-                  {persp_http_listener, start_link, [?DEF_BINDADDR, ?DEF_PORT]},
+                  {persp_http_listener, start_link, [?DEF_BINDADDR, ?DEF_HTTP_PORT]},
                   permanent,
                   2000,
                   worker,

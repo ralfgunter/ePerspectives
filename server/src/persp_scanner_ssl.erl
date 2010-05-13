@@ -175,15 +175,3 @@ time_now() ->
     Seconds = calendar:datetime_to_gregorian_seconds(LocalTime) - ?UNIX_EPOCH,
     
     Seconds.
-
-send_results(ScanData, Results) ->
-    ClientAddress = ScanData#scan_data.address,
-    ClientSocket  = ScanData#scan_data.socket,
-    ClientPort    = ScanData#scan_data.port,
-    
-    case gen_udp:send(ClientSocket, ClientAddress, ClientPort, Results) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            error_logger:error_msg("Failed to send results: ~p\n", [Reason])
-    end.
