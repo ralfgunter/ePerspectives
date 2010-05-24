@@ -87,12 +87,14 @@ handle_info(_Info, HTTPd_Pid) ->
 
 % TODO: we're still not checking for possibly malformed Addresses, Ports and
 %       SvTypes; do something about it.
+% TODO: the order of the 'keywords' (host, port, service_type, etc) should not
+%       matter; write a better parser.
+% TODO: add support for different digest types.
 parse_request(String) ->
     case string:tokens(String, "&=") of
         ["/?host", Address, "port", Port, "service_type", SvType, "HTTP/1.1"] ->
             {ok, {Address, list_to_integer(Port), SvType}};
         _MalformedRequest ->
-            error_logger:error_msg("Malformed request", String),
             {error, String}
     end.
 
@@ -102,7 +104,11 @@ do(ModData) ->
         {ok, ParsedRequest} ->
             Body = persp_scanner_sup:handle_request(http, ParsedRequest),
             StatusCode = 200;
-        {error, _MalformedRequest} ->
+        {error, MalformedRequest} ->
+            {SrcPort, SrcIP} = httpd_socket:peername(ModData#mod.socket_type,
+                                                     ModData#mod.socket),
+            error_logger:error_msg("Malformed request from ~s:~p\n~p\n",
+                                   [SrcIP, SrcPort, MalformedRequest]),
             Body = "Malformed request",
             StatusCode = 400
     end,
