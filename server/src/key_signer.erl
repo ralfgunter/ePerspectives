@@ -7,18 +7,14 @@
 %%% this software.
 
 -module(key_signer).
--behaviour(gen_server).
 
 -include_lib("public_key/include/public_key.hrl").
 
 %% External API
 -export([start_link/1]).
 
-%% gen_server callbacks
--export([init/1, terminate/2]).
--export([handle_call/3, handle_cast/2, handle_info/2]).
--export([code_change/3]).
-
+%% Internal API
+-export([handle_request/1]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -26,38 +22,9 @@
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link(KeyTuple) ->
-    gen_server:start_link(?MODULE, KeyTuple, []).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%
-%% gen_server callbacks
-%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-init(KeyTuple) ->
-    {ok, KeyTuple}.
-
-terminate(_Reason, _KeyTuple) ->
-    ok.
-
-code_change(_OldVersion, KeyTuple, _Extra) ->
-    {ok, KeyTuple}.
-
-handle_cast(_Msg, KeyTuple) ->
-    {noreply, KeyTuple}.
-
-handle_info(_Info, KeyTuple) ->
-    {noreply, KeyTuple}.
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%
-%% Call handling
-%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_call({sign, Data}, _From, KeyTuple) ->
-    {ok, Signature} = sign(Data, KeyTuple),
+    Pid = spawn_link(?MODULE, handle_request, [KeyTuple]),
     
-    {reply, Signature, KeyTuple}.
+    {ok, Pid}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -65,10 +32,14 @@ handle_call({sign, Data}, _From, KeyTuple) ->
 %% Internal API
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-sign(Data, {Mp_priv_exp, Mp_pub_exp, Mp_mod}) ->
-    % TODO: make DigestType customizable
+handle_request(KeyTuple) ->
+    receive
+        {sign, From, Data, DigestType} ->
+            Signature = sign(Data, DigestType, KeyTuple),
+            From ! {ok, Signature}
+    end.
+
+sign(Data, DigestType, {Mp_priv_exp, Mp_pub_exp, Mp_mod}) ->
     Mp_data = << (byte_size(Data)):32/integer-big, Data/binary >>,
-    Signature = crypto:rsa_sign(md5, Mp_data,
-                                [Mp_pub_exp, Mp_mod, Mp_priv_exp]),
     
-    {ok, Signature}.
+    crypto:rsa_sign(DigestType, Mp_data, [Mp_pub_exp, Mp_mod, Mp_priv_exp]).

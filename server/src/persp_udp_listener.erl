@@ -19,7 +19,6 @@
 -export([code_change/3]).
 
 -define(UDP_OPTIONS, [binary, {reuseaddr, true}, {active, true}]).
--define(MAX_LENGTH, 273).
 
 -record(scan_data, {socket, address, port, data}).
 
@@ -47,7 +46,6 @@ receive_and_send_results(ScanData) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init(Port) ->
-    %process_flag(trap_exit, true),
     case gen_udp:open(Port, ?UDP_OPTIONS) of
         {ok, Socket} ->
             {ok, Socket};

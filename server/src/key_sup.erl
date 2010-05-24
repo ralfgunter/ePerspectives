@@ -29,7 +29,12 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 sign(Data) ->
     {ok, Pid} = basic_spawn(),
-    gen_server:call(Pid, {sign, Data}).
+    Pid ! {sign, self(), Data, md5},
+    
+    receive
+    	{ok, Signature} ->
+    		Signature
+    end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%

@@ -145,7 +145,7 @@ check_service_id(Service_ID) ->
     % the matching objects' values, instead of the entire object.
     TempList = dets:lookup(sids, Service_ID),
     
-    lists:map(fun({_Key, Value}) -> Value end, TempList).
+    lists:map(fun({_Key, Fingerprint}) -> Fingerprint end, TempList).
 
 check_fingerprints(Service_ID, Fingerprints) ->
     Lambda = fun(CurrentFingerprint) ->
@@ -155,15 +155,17 @@ check_fingerprints(Service_ID, Fingerprints) ->
     lists:map(Lambda, Fingerprints).
 
 %% Database internal representation
+insert_timestamp(Service_ID, Fingerprint, Beginning, End, Rest) ->
+    dets:insert(cache, { {Service_ID, Fingerprint},
+                         [ {Beginning, End} | Rest ]
+                       }).
+
 add_fingerprint(Service_ID, Fingerprint) ->
     dets:insert(sids, {Service_ID, Fingerprint}).
 
-add_timestamp(Service_ID, Fingerprint, Timestamp_beg, Timestamp_end) ->
+add_timestamp(Service_ID, Fingerprint, Beginning, End) ->
     Timestamps = get_timestamps(Service_ID, Fingerprint),
-    
-    dets:insert(cache, { {Service_ID, Fingerprint},
-                         [ {Timestamp_beg, Timestamp_end} | Timestamps ]
-                       }).
+    insert_timestamp(Service_ID, Fingerprint, Beginning, End, Timestamps).
 
 get_timestamps(Service_ID, Fingerprint) ->
     [{_Key, Timestamps}] = dets:lookup(cache, {Service_ID, Fingerprint}),
@@ -172,36 +174,26 @@ get_timestamps(Service_ID, Fingerprint) ->
 
 update_timestamps(Service_ID, Fingerprint, Timestamps, NewEnd) ->
     [{Beg, _OldEnd} | Rest] = Timestamps,
-    
-    % TODO: put this in its own function?
-    dets:insert(cache, { {Service_ID, Fingerprint},
-                         [ {Beg, NewEnd} | Rest ]
-                       }).
+    insert_timestamp(Service_ID, Fingerprint, Beg, NewEnd, Rest).
 
 add_new_entry(Service_ID, Fingerprint, Timestamp) ->
-    dets:insert(cache, { {Service_ID, Fingerprint},
-                         [ {Timestamp, Timestamp} ]
-                       }).
+    insert_timestamp(Service_ID, Fingerprint, Timestamp, Timestamp, []).
 
 % Helper functions
 get_most_recent_fingerprint(Service_ID) ->
     [Head | Rest] = check_cache(Service_ID),
+    {Fingerprint, _Timestamps} = lists:foldl(fun last_timestamp/2, Head, Rest),
     
-    % TODO: perhaps put this in its own module?
-    % TODO: find out if it's faster to sort with usort and then get the head
-    Lambda = fun(CurrentTimestamp, BiggestYet) ->
-        {_, [{_, BiggestEnd} | _]} = BiggestYet,
-        {_, [{_, CurrentEnd} | _]} = CurrentTimestamp,
-        
-        if
-            CurrentEnd > BiggestEnd -> CurrentTimestamp;
-            true -> BiggestYet
-        end
-    end,
+    Fingerprint.
+
+last_timestamp(CurrentTimestamp, BiggestYet) ->
+    {_, [{_, BiggestEnd} | _]} = BiggestYet,
+    {_, [{_, CurrentEnd} | _]} = CurrentTimestamp,
     
-    {LastFingerprint, _Timestamps} = lists:foldl(Lambda, Head, Rest),
-    
-    LastFingerprint.
+    if
+        CurrentEnd > BiggestEnd -> CurrentTimestamp;
+        true -> BiggestYet
+    end.
 
 update_entry(Service_ID, Fingerprint, NewEnd) ->
     Timestamps = get_timestamps(Service_ID, Fingerprint),
