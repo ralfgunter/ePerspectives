@@ -23,7 +23,7 @@ User interaction is done through the <b>persp_interface</b> module:
 * start/0 - []: spawns a persp_client instance, and is required before any of the other functions below;
 * scan/3 - [Domain, Port, Type]: requests a scan from the notary servers; currently, Type can only be 2 (it means ssl);
 * print/0 - []: prints the scan results that have already been received;
-* add_server/4 - [IP, Port, Public_Key, Server_type]: adds a notary server to the servers list (Server_type can only be udp for now);
+* add_server/4 - [IP, Port, Public_Key, Server_type]: adds a notary server to the servers list (Server_type can be either udp or http);
 * del_server/1 - [IP]: deletes a notary server from the servers list;
 * pubkey_pem_to_string/1 - [Filepath]: returns a string containing the pem-encoded public key.
 
@@ -48,10 +48,11 @@ After compiling, make sure all necessary folders/files are in place:
    \_ sids
                - default storage for the sids table;
                - subject to change;
-
    \_ signatures
                - default storage for the signatures table;
-               - subject to change;
+               - subject to change.
+ 
+ server/http_root/htdocs/ - empty folder required to run the httpd
 
 If so, you can start the server/scanner from the <b>server/ebin</b> folder as follows:
 
@@ -62,11 +63,11 @@ If so, you can start the server/scanner from the <b>server/ebin</b> folder as fo
  1> application:start(persp_server).
  ok
 
-To (somewhat) cleanly stop the server, use the following command:
+To cleanly stop the server, use the following command:
 
  application:stop(persp_server).
 
-If you want more information, it is recommended that you start the eshell with the command line argument <b>-boot start_sasl</b>, though that might slow down things. Finally, the shell command <b>appmon:start()</b> gives you a nice visual overview of how things are running (when on it, click on persp_server to see more).
+If you want more information, it is recommended that you start the eshell with the command line argument <b>-boot start_sasl</b>, though that might slow down things a bit. Finally, the shell command <b>appmon:start()</b> gives you a nice visual overview of how things are running (when on it, click on persp_server to see more).
 
 =Compatibility
 
