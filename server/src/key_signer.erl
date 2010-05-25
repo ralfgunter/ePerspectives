@@ -10,6 +10,8 @@
 
 -include_lib("public_key/include/public_key.hrl").
 
+-define(SIG_LEN, 172).
+
 %% External API
 -export([start_link/1]).
 
@@ -41,5 +43,8 @@ handle_request(KeyTuple) ->
 
 sign(Data, DigestType, {Mp_priv_exp, Mp_pub_exp, Mp_mod}) ->
     Mp_data = << (byte_size(Data)):32/integer-big, Data/binary >>,
+    SignatureBin = crypto:rsa_sign(DigestType,
+                                   Mp_data, [Mp_pub_exp, Mp_mod, Mp_priv_exp]),
     
-    crypto:rsa_sign(DigestType, Mp_data, [Mp_pub_exp, Mp_mod, Mp_priv_exp]).
+    % TODO: make signature length customizable
+    {SignatureBin, {rsa, DigestType}, ?SIG_LEN}.

@@ -14,7 +14,7 @@
 -export([get_ssl_scanner/0]).
 
 %% Supervisor behaviour callbacks
--export([start_link/2]).
+-export([start_link/1]).
 -export([init/1]).
 
 -define(MAX_RESTART,  5).
@@ -88,7 +88,7 @@ handle_request(http, ScanInfo) ->
 %% Supervisor behaviour callbacks
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-start_link(ScannerModule, basic) ->
+start_link(ScannerModule) ->
     crypto:start(),
     ssl:start(),
     supervisor:start_link({local, ?MODULE}, ?MODULE, [ScannerModule]).

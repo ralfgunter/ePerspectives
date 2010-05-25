@@ -10,7 +10,7 @@
 -behaviour(gen_server).
 
 %% External API
--export([start_link/2]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, terminate/2]).
@@ -23,19 +23,18 @@
 %% gen_server callbacks
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-start_link(Cache_filename, Sids_filename) ->
-    gen_server:start_link({local, db_serv}, ?MODULE,
-                          [Cache_filename, Sids_filename], []).
+start_link(DBFiles) ->
+    gen_server:start_link({local, db_serv}, ?MODULE, DBFiles, []).
 
 init(DBFiles) ->
     load_db_files(DBFiles),
-    process_flag(trap_exit, true),
     
     {ok, {}}.
 
 terminate(_Reason, _State) ->
     dets:close(sids),
-    dets:close(cache).
+    dets:close(cache),
+    dets:close(signatures).
 
 code_change(_OldVersion, State, _Extra) ->
     {ok, State}.
@@ -49,12 +48,12 @@ handle_info(_Info, State) ->
 %% Cast handling (asynchronous commands)
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({merge_entry, Service_ID, Fingerprint, Timestamp}, State) ->
-    merge_entry(Service_ID, Fingerprint, Timestamp),
-    {noreply, State};
-
 handle_cast({add_entry, Service_ID, Fingerprint, Timestamp}, State) ->
     add_entry(Service_ID, Fingerprint, Timestamp),
+    {noreply, State};
+
+handle_cast({merge_signature, Service_ID, SignatureInfo}, State) ->
+    merge_signature(Service_ID, SignatureInfo),
     {noreply, State};
 
 handle_cast(_Msg, State) ->
@@ -66,6 +65,11 @@ handle_cast(_Msg, State) ->
 %% Call handling
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% TODO: this should be a cast; see rescan_entry:persp_scanner_ssl
+handle_call({merge_entry, Service_ID, Fingerprint, Timestamp}, _From, State) ->
+    merge_entry(Service_ID, Fingerprint, Timestamp),
+    {reply, ok, State};
+
 handle_call({check_cache, Service_ID}, _From, State) ->
     Cache = check_cache(Service_ID),
     {reply, Cache, State};
@@ -73,6 +77,10 @@ handle_call({check_cache, Service_ID}, _From, State) ->
 handle_call({list_all_sids}, _From, State) ->
     List = list_all_sids(),
     {reply, List, State};
+
+handle_call({get_signature, Service_ID}, _From, State) ->
+    SignatureInfo = get_signature(Service_ID),
+    {reply, SignatureInfo, State};
 
 handle_call(Request, _From, State) ->
     {stop, {unknown_call, Request}, State}.
@@ -179,7 +187,23 @@ update_timestamps(Service_ID, Fingerprint, Timestamps, NewEnd) ->
 add_new_entry(Service_ID, Fingerprint, Timestamp) ->
     insert_timestamp(Service_ID, Fingerprint, Timestamp, Timestamp, []).
 
-% Helper functions
+%% Signatures
+% SignatureInfo is of the following format:
+%     {SignatureBinary, SignatureAlgorithm, SignatureLength}
+% Where:
+%     - SignatureBinary is the signature itself
+%     - SignatureAlgorithm can either be {rsa, md5} or {rsa, sha}
+%     - SignatureLength    currently can only be 172 (bytes)
+get_signature(Service_ID) ->
+    [{_Service_ID, SignatureInfo}] = dets:lookup(signatures, Service_ID),
+    
+    SignatureInfo.
+
+% This can both insert a new signature to the cache and update an old one.
+merge_signature(Service_ID, SignatureInfo) ->
+    dets:insert(signatures, {Service_ID, SignatureInfo}).
+
+%% Helper functions
 get_most_recent_fingerprint(Service_ID) ->
     [Head | Rest] = check_cache(Service_ID),
     {Fingerprint, _Timestamps} = lists:foldl(fun last_timestamp/2, Head, Rest),
@@ -201,6 +225,7 @@ update_entry(Service_ID, Fingerprint, NewEnd) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database initialization and loading
-load_db_files([Sids_filename, Cache_filename]) ->
-    dets:open_file(sids,  [{file, Sids_filename}, {type, bag}]),
-    dets:open_file(cache, [{file, Cache_filename}]).
+load_db_files([Sids_filename, Cache_filename, Signatures_filename]) ->
+    dets:open_file(sids,       [{file, Sids_filename}, {type, bag}]),
+    dets:open_file(cache,      [{file, Cache_filename}]),
+    dets:open_file(signatures, [{file, Signatures_filename}]).

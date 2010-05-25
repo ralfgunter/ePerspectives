@@ -8,29 +8,9 @@
 
 -module(persp_http_parser).
 
--export([parse_sid_list/1]).
 -export([prepare_response/2]).
 
-%% TODO: make these customizable
--define(SIG_TYPE, "rsa-md5").
--define(SIG_LEN,        172).
--define(VERSION,        "1").
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%
-%% Parsing
-%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% TODO: this might be unnecessary if the database is structured differently;
-%       investigate.
-parse_sid_list(SIDList) ->
-    % Here the last element of Service_type is a NULL, which must be removed in
-    % this module because all other modules using it assume it's not there.
-    [Address, StrPort, [Service_type, 0]] = string:tokens(SIDList, ":,"),
-    
-    {Address, list_to_integer(StrPort), [Service_type]}.
+-define(VERSION, "1").
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -40,11 +20,12 @@ parse_sid_list(SIDList) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 prepare_response(Service_ID, Results) ->
     Keystamps = lists:map(fun prepare_keystamp/1, Results),
-    Signature = get_udp_signature(Service_ID, Results),
+    {EncodedSig, SigAlgorithm, _SigLen} = get_signature(Service_ID),
+    SigType = format_signature_type(SigAlgorithm),
     
     SimpleContent =
         {notary_reply,
-            [{version, ?VERSION}, {sig_type, ?SIG_TYPE}, {sig, Signature}],
+            [{version, ?VERSION}, {sig_type, SigType}, {sig, EncodedSig}],
             Keystamps},
     
     lists:flatten(xmerl:export_simple([SimpleContent], xmerl_xml)).
@@ -70,9 +51,21 @@ prepare_timestamps({Start, End}) ->
 %% Internal API
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-get_udp_signature(Service_ID, Results) ->
-    UDPResponse = persp_udp_parser:prepare_response(Service_ID, Results),
-    persp_udp_parser:get_signature(UDPResponse).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Signature handling
+request_signature(Service_ID) ->
+    gen_server:call(db_serv, {get_signature, Service_ID}).
+
+get_signature(Service_ID) ->
+    {SigBin, SigAlgorithm, SigLen} = request_signature(Service_ID),
+    EncodedSignature = binary_to_list(base64:encode(SigBin)),
+    
+    {EncodedSignature, SigAlgorithm, SigLen}.
+
+format_signature_type({rsa, md5}) -> "rsa-md5";
+format_signature_type({rsa, sha}) -> "rsa-sha".
+
 
 % TODO: put this in another module
 binary_to_readable_string(Bin) ->

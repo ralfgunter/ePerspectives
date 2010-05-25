@@ -89,7 +89,6 @@ handle_info(_Info, HTTPd_Pid) ->
 %       SvTypes; do something about it.
 % TODO: the order of the 'keywords' (host, port, service_type, etc) should not
 %       matter; write a better parser.
-% TODO: add support for different digest types.
 parse_request(String) ->
     case string:tokens(String, "&=") of
         ["/?host", Address, "port", Port, "service_type", SvType, "HTTP/1.1"] ->

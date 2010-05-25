@@ -12,7 +12,7 @@
 
 -export([parse_scandata/1, parse_sid_list/1]).
 -export([prepare_response/2]).
--export([get_signature/1]).
+-export([sign/2]).
 
 -record(scan_data, {socket, address, port, data}).
 
@@ -45,38 +45,37 @@ parse_sid_bin(SIDBin) ->
 %% Preparing the response
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-prepare_response(Service_ID, List) ->
-    Num_entries = length(List),
-    prepare_response(Service_ID, List, << Num_entries:16, 16:16, 3:8 >>).
+prepare_response(Service_ID, ScanResults) ->
+    finalize_response(Service_ID, prepare_key_info(ScanResults)).
 
-% This is called when we're done parsing all {fingerprint, timestamps} entries
-prepare_response(Service_ID, [], Key_info) ->
-    Name_len  = length(Service_ID),
-    Total_len = 10 + Name_len + byte_size(Key_info) + ?SIG_LEN,
-    
-    % TODO: signature length should be customizable - keyserver.
-    Header = << 1:8, 3:8, Total_len:16, 9:16, Name_len:16, ?SIG_LEN:16 >>,
-    
+% An explanation of the values used below is available in the client udp parser
+% code: client/src/persp_udp_parser.erl
+finalize_response(Service_ID, Key_info) ->
     SIDBin = list_to_binary(Service_ID),
-    Signature = sign(Key_info, SIDBin),
+    {SigBin, _SigAlgorithm, SigLen} = request_signature(Service_ID),
     
-    << Header/binary, SIDBin/binary, Key_info/binary, Signature/binary >>;
+    Name_len  = length(Service_ID),
+    Total_len = 10 + Name_len + byte_size(Key_info) + SigLen,
+    
+    Header = << 1:8, 3:8, Total_len:16, 9:16, Name_len:16, SigLen:16 >>,
+    
+    << Header/binary, SIDBin/binary, Key_info/binary, SigBin/binary >>.
 
-% This is called once per fingerprint
-prepare_response(Service_ID, [CurrentEntry | Rest], Results) ->
-    {Fingerprint, Timestamps} = CurrentEntry,
+prepare_key_info(ScanResults) ->
+    Num_entries = length(ScanResults),
+    InitialHeader = << Num_entries:16, 16:16, 3:8 >>,
     
+    lists:foldl(fun prepare_fingerprint/2, InitialHeader, ScanResults).
+
+prepare_fingerprint({Fingerprint, Timestamps}, ResultsSoFar) ->
     BinTimestamps = prepare_timestamps(Timestamps),
-    Data = << Fingerprint/binary, BinTimestamps/binary >>,
     
-    prepare_response(Service_ID, Rest, << Results/binary, Data/binary >>).
+    << ResultsSoFar/binary, Fingerprint/binary, BinTimestamps/binary >>.
 
 prepare_timestamps(Timestamps) ->
     lists:foldl(fun prepare_timestamp/2, <<>>, Timestamps).
 
-prepare_timestamp(Timestamp, ResultSoFar) ->
-    {Timestamp_beg, Timestamp_end} = Timestamp,
-    
+prepare_timestamp({Timestamp_beg, Timestamp_end}, ResultSoFar) ->
     << ResultSoFar/binary, Timestamp_beg:32, Timestamp_end:32 >>.
 
 
@@ -85,17 +84,12 @@ prepare_timestamp(Timestamp, ResultSoFar) ->
 %% Signing
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-get_signature(PreparedBin) ->
-    << _:16, Total_len:16, _:32, Sig_len:16, PostHeader/binary >> = PreparedBin,
-    Len = Total_len - Sig_len - 10,
-    << _:Len/bytes, Signature/binary >> = PostHeader,
-    
-    binary_to_list(base64:encode(Signature)).
+request_signature(Service_ID) ->
+    gen_server:call(db_serv, {get_signature, Service_ID}).
 
-sign(Key_info, SIDBin) ->
+sign(Service_ID, ScanResults) ->
+    Key_info = prepare_key_info(ScanResults),
+    SIDBin   = list_to_binary(Service_ID),
     Data = << SIDBin/binary, Key_info/binary >>,
     
-    sign_data(Data).
-
-sign_data(Data) ->
     key_sup:sign(Data).

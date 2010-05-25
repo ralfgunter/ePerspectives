@@ -28,7 +28,9 @@
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start(_Type, _Args) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [persp_scanner_ssl]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE,
+                          [persp_scanner_ssl,
+                           ["../db/sids", "../db/cache", "../db/signatures"]]).
 
 stop(_S) ->
     ok.
@@ -39,7 +41,7 @@ stop(_S) ->
 %% Supervisor behaviour callbacks
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-init([ScannerModule]) ->
+init([ScannerModule, DBFiles]) ->
     {ok,
         {_SupFlags = {one_for_one, ?MAX_RESTART, ?MAX_TIME},
             [
@@ -69,7 +71,7 @@ init([ScannerModule]) ->
               },
               % DB server (caches the scan results)
               {   db_serv,
-                  {db_server_dets, start_link, ["../db/cache", "../db/sids"]},
+                  {db_server_dets, start_link, [DBFiles]},
                   permanent,
                   2000,
                   worker,
@@ -77,7 +79,7 @@ init([ScannerModule]) ->
               },
               % Key signing supervisor
               {   key_serv,
-                  {key_sup, start_link, ["../keys/private.pem", basic]},
+                  {key_sup, start_link, ["../keys/private.pem"]},
                   permanent,
                   infinity,
                   supervisor,
@@ -85,7 +87,7 @@ init([ScannerModule]) ->
               },
               % Scanner instance supervisor
               {   scanner_sup,
-                  {persp_scanner_sup, start_link, [ScannerModule, basic]},
+                  {persp_scanner_sup, start_link, [ScannerModule]},
                   permanent,
                   infinity,
                   supervisor,

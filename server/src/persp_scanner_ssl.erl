@@ -103,8 +103,12 @@ add_entry(Service_ID, Fingerprint, Timestamp) ->
                     {add_entry, Service_ID, Fingerprint, Timestamp}).
 
 merge_entry(Service_ID, Fingerprint, Timestamp) ->
-    gen_server:cast(db_serv,
+    gen_server:call(db_serv,
                     {merge_entry, Service_ID, Fingerprint, Timestamp}).
+
+merge_signature(Service_ID, SignatureInfo) ->
+    gen_server:cast(db_serv,
+                    {merge_signature, Service_ID, SignatureInfo}).
 
 check_cache(Service_ID) ->
     gen_server:call(db_serv,
@@ -131,15 +135,23 @@ scan({Address, Port, Service_type}) ->
 new_scan(Service_ID, Address, Port) ->
     {ok, Fingerprint} = get_fingerprint(Address, Port),
     Timestamp = time_now(),
-    add_entry(Service_ID, Fingerprint, Timestamp),
+    ScanResults = {Fingerprint, [{Timestamp, Timestamp}]},
     
-    {Fingerprint, [{Timestamp, Timestamp}]}.
+    add_entry(Service_ID, Fingerprint, Timestamp),
+    sign_entry(Service_ID, [ScanResults]),
+    
+    ScanResults.
 
 rescan_entry(Service_ID, Address, Port) ->
     {ok, Fingerprint} = get_fingerprint(Address, Port),
     Timestamp = time_now(),
-    
-    merge_entry(Service_ID, Fingerprint, Timestamp).
+    % WARNING: There could be a nasty race condition here!
+    % If merge_entry is asynchronous, it might not update the database in time
+    % for sign_entry to fetch the results.
+    % The workaround is to make merge_entry synchronous, but I'm looking for a
+    % better solution.
+    merge_entry(Service_ID, Fingerprint, Timestamp),
+    sign_entry(Service_ID).
 
 get_fingerprint(Address, Port) ->
     case ssl:connect(Address, Port, ?SOCKET_OPTS) of
@@ -163,8 +175,21 @@ scan_list(SIDList) ->
 
 rescan_sid(Service_ID) ->
     {ok, Pid} = persp_scanner_sup:get_ssl_scanner(),
-    {Address, Port, _} = persp_parser:parse_sid_list(Service_ID),
+    {Address, Port, _} = persp_udp_parser:parse_sid_list(Service_ID),
     rescan(Pid, Service_ID, Address, Port).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Signing
+% Since rescan_entry doesn't have all the cached results handy, we pull them
+% back from the database.
+sign_entry(Service_ID) ->
+    Results = check_cache(Service_ID),
+    SignatureInfo = persp_udp_parser:sign(Service_ID, Results),
+    merge_signature(Service_ID, SignatureInfo).
+
+sign_entry(Service_ID, ScanResults) ->
+    SignatureInfo = persp_udp_parser:sign(Service_ID, ScanResults),
+    merge_signature(Service_ID, SignatureInfo).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Misc

@@ -15,7 +15,7 @@
 -export([sign/1]).
 
 %% Supervisor behaviour callbacks
--export([start_link/2]).
+-export([start_link/1]).
 -export([init/1]).
 
 -define(MAX_RESTART,  5).
@@ -28,20 +28,21 @@
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 sign(Data) ->
-    {ok, Pid} = basic_spawn(),
+    {ok, Pid} = supervisor:start_child(?MODULE, []),
     Pid ! {sign, self(), Data, md5},
     
     receive
-    	{ok, Signature} ->
-    		Signature
+        {ok, Signature} ->
+            Signature
     end.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
 %% Supervisor behaviour callbacks
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-start_link(PrivateKeyFilepath, basic) ->
+start_link(PrivateKeyFilepath) ->
     KeyTuple = prepare_key(PrivateKeyFilepath),
     
     supervisor:start_link({local, ?MODULE}, ?MODULE, KeyTuple).
@@ -61,18 +62,6 @@ init(KeyTuple) ->
             ]
         }
     }.
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%
-%% Spawning modes
-%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Basic - children are spawned on-demand
-basic_spawn() ->
-    supervisor:start_child(?MODULE, []).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
