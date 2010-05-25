@@ -45,11 +45,13 @@ After compiling, make sure all necessary folders/files are in place:
    \_ cache
                - default storage for the cache table;
                - subject to change;
-               - for now, automatically created only by dets.
    \_ sids
                - default storage for the sids table;
                - subject to change;
-               - for now, automatically created only by dets.
+
+   \_ signatures
+               - default storage for the signatures table;
+               - subject to change;
 
 If so, you can start the server/scanner from the <b>server/ebin</b> folder as follows:
 
