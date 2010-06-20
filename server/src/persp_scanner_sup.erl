@@ -10,15 +10,18 @@
 -behaviour(supervisor).
 
 %% External API
--export([handle_request/2]).
+-export([handle_request/2, handle_scan_results/4]).
 -export([get_ssl_scanner/0]).
 
 %% Supervisor behaviour callbacks
 -export([start_link/1]).
 -export([init/1]).
 
--define(MAX_RESTART,  5).
--define(MAX_TIME,    60).
+-define(MAX_RESTART,    5).
+-define(MAX_TIME,      60).
+-define(DEF_TIMEOUT, 5000).
+
+-record(client_info, {socket, address, port, data}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -44,43 +47,75 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% UDP
-handle_request(udp, ScanData) ->
-    % TODO: come up with better names for ScanInfo and ScanData
-    % ScanInfo: {Address, Port, Service_type}
+handle_request(udp, ClientInfo) ->
+    % ServerInfo: {Address, Port, Service_type}
     %           - information about the server
-    % ScanData: {ClientSocket, ClientAddress, ClientPort, ClientData}
+    % ClientInfo: {ClientSocket, ClientAddress, ClientPort, ClientData}
     %           - information about the client (plus the scan request it sent)
-    ScanInfo = {_, _, Service_type} = persp_udp_parser:parse_scandata(ScanData),
-    SenderPid = spawn(persp_udp_listener, receive_and_send_results, [ScanData]),
+    ServerInfo = persp_udp_parser:parse_clientinfo(ClientInfo),
+    {ServerAddress, ServerPort, Service_type} = ServerInfo,
     
-    % TODO: perhaps this should be fetched from an ets table, which in turn
-    % is loaded from a config file.
-    case Service_type of
-        "2" ->
-            {ok, Pid} = get_ssl_scanner(),
-            persp_scanner_ssl:start_scan(Pid, {SenderPid, ScanInfo})
-    end;
+    % TODO: put these somewhere else
+    OkFun = fun(Service_ID, Results) ->
+        BinResults = persp_udp_parser:prepare_response(Service_ID, Results),
+        persp_udp_listener:send_results(ClientInfo, BinResults)
+    end,
+    ErrorFun = fun(Reason) ->
+        error_logger:error_msg("Error handling request from ~p:~p of
+                                ~p:~p ~p\n~p\n",
+                                [ClientInfo#client_info.address,
+                                 ClientInfo#client_info.port,
+                                 ServerAddress,
+                                 ServerPort,
+                                 Service_type,
+                                 Reason])
+    end,
+    TimeoutFun = fun() ->
+        error_logger:error_msg("Timeout on request from ~p:~p of ~p:~p ~p\n",
+                                [ClientInfo#client_info.address,
+                                 ClientInfo#client_info.port,
+                                 ServerAddress,
+                                 ServerPort,
+                                 Service_type])
+    end,
+                                
+    SenderPID = spawn(?MODULE, handle_scan_results,
+                      [OkFun, ErrorFun, TimeoutFun, ?DEF_TIMEOUT]),
+    dispatch_scanner(SenderPID, ServerInfo);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% HTTP
-handle_request(http, ScanInfo) ->
-    {Address, Port, Service_type} = ScanInfo,
+handle_request(http, ServerInfo) ->
+    {Address, Port, Service_type} = ServerInfo,
     % TODO: this doesn't seem right; investigate.
     SID = Address ++ ":" ++ integer_to_list(Port) ++ "," ++ Service_type,
     
+    dispatch_scanner(self(), ServerInfo),
     
-    % TODO: perhaps this should be fetched from an ets table, which in turn
-    %       is loaded from a config file.
+    handle_scan_results(
+        fun(_, Results) ->
+            {ok, persp_http_parser:prepare_response(SID, Results)}
+        end,
+        fun(Reason) -> {error, Reason} end,
+        fun() -> timeout end,
+        ?DEF_TIMEOUT).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Helper functions
+dispatch_scanner(SenderPID, ServerInfo) ->
+    {_, _, Service_type} = ServerInfo,
+    % TODO: this should be read from a configuration file
     case Service_type of
         "2" ->
             {ok, Pid} = get_ssl_scanner(),
-            persp_scanner_ssl:start_scan(Pid, {self(), ScanInfo})
-    end,
-    
+            persp_scanner_ssl:start_scan(Pid, {SenderPID, ServerInfo})
+    end.
+
+handle_scan_results(OkFun, ErrorFun, TimeoutFun, Timeout) ->
     receive
-        {ok, _Service_ID, Results} ->
-            persp_http_parser:prepare_response(SID, Results)
-        % TODO: handle scan error and timeout
+        {ok, Service_ID, Results} -> apply(OkFun,      [Service_ID, Results]);
+        {error, Reason}           -> apply(ErrorFun,   [Reason])
+        after Timeout             -> apply(TimeoutFun, [])
     end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

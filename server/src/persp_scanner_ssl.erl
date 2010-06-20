@@ -24,7 +24,7 @@
 %% FSM states
 -export(['SCAN'/2]).
 
--record(scan_data, {socket, address, port, data}).
+-record(client_info, {socket, address, port, data}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -42,8 +42,7 @@ rescan(Pid, Service_ID, Address, Port) when is_pid(Pid) ->
     gen_fsm:send_event(Pid, {rescan, Service_ID, Address, Port}).
 
 rescan_all() ->
-    SIDList = get_sid_list(),
-    scan_list(SIDList).
+    scan_list(get_sid_list()).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -52,7 +51,7 @@ rescan_all() ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init(_Args) ->
-    {ok, 'SCAN', #scan_data{}}.
+    {ok, 'SCAN', #client_info{}}.
 
 handle_info(_Info, StateName, StateData) ->
     {noreply, StateName, StateData}.
@@ -75,13 +74,13 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 %% FSM States
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-'SCAN'({start_scan, {ReplyTo, ScanInfo}}, State) ->
+'SCAN'({start_scan, {RequestorPID, ScanInfo}}, State) ->
     case scan(ScanInfo) of
         {ok, Service_ID, Results} ->
-            ReplyTo ! {ok, Service_ID, Results};
+            RequestorPID ! {ok, Service_ID, Results};
         {error, Reason} ->
-            error_logger:error_msg("Scan failed: ~p\n", [Reason]),
-            ReplyTo ! {error, Reason}
+            error_logger:error_msg("Scan failed\n~p\n", [Reason]),
+            RequestorPID ! {error, Reason}
     end,
     {stop, normal, State};
 
@@ -98,13 +97,13 @@ code_change(_OldVsn, StateName, StateData, _Extra) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Database access
-add_entry(Service_ID, Fingerprint, Timestamp) ->
+add_cache_entry(Service_ID, Fingerprint, Timestamp) ->
     gen_server:cast(db_serv,
-                    {add_entry, Service_ID, Fingerprint, Timestamp}).
+                    {add_cache_entry, Service_ID, Fingerprint, Timestamp}).
 
-merge_entry(Service_ID, Fingerprint, Timestamp) ->
+merge_cache_entry(Service_ID, Fingerprint, Timestamp) ->
     gen_server:call(db_serv,
-                    {merge_entry, Service_ID, Fingerprint, Timestamp}).
+                    {merge_cache_entry, Service_ID, Fingerprint, Timestamp}).
 
 merge_signature(Service_ID, SignatureInfo) ->
     gen_server:cast(db_serv,
@@ -116,7 +115,7 @@ check_cache(Service_ID) ->
 
 get_sid_list() ->
     gen_server:call(db_serv,
-                    {list_all_sids}).
+                    list_all_sids).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Scanning
@@ -125,33 +124,42 @@ scan({Address, Port, Service_type}) ->
     
     case check_cache(Service_ID) of
         [] ->
-            Result = new_scan(Service_ID, Address, Port),
-            
-            {ok, Service_ID, [Result]};
+            case new_scan(Service_ID, Address, Port) of
+                {ok, Result} ->
+                    {ok, Service_ID, [Result]};
+                Error ->
+                    Error
+            end;
         Results ->
             {ok, Service_ID, Results}
     end.
 
 new_scan(Service_ID, Address, Port) ->
-    {ok, Fingerprint} = get_fingerprint(Address, Port),
-    Timestamp = time_now(),
-    ScanResults = {Fingerprint, [{Timestamp, Timestamp}]},
-    
-    add_entry(Service_ID, Fingerprint, Timestamp),
-    sign_entry(Service_ID, [ScanResults]),
-    
-    ScanResults.
+    case get_fingerprint(Address, Port) of
+        {ok, Fingerprint} ->
+            Timestamp = time_now(),
+            %% TODO: abstract this
+            ScanResult = {Fingerprint, [{Timestamp, Timestamp}]},
+            
+            add_cache_entry(Service_ID, Fingerprint, Timestamp),
+            sign_entry(Service_ID, [ScanResult]),
+            
+            {ok, ScanResult};
+        Error ->
+            Error
+    end.
 
 rescan_entry(Service_ID, Address, Port) ->
-    {ok, Fingerprint} = get_fingerprint(Address, Port),
-    Timestamp = time_now(),
-    % WARNING: There could be a nasty race condition here!
-    % If merge_entry is asynchronous, it might not update the database in time
-    % for sign_entry to fetch the results.
-    % The workaround is to make merge_entry synchronous, but I'm looking for a
-    % better solution.
-    merge_entry(Service_ID, Fingerprint, Timestamp),
-    sign_entry(Service_ID).
+    case get_fingerprint(Address, Port) of
+        {ok, Fingerprint} ->
+            Timestamp = time_now(),
+            % If merge_cache_entry were asynchronous, it might not update the
+            % database in time for sign_entry to fetch the results.
+            merge_cache_entry(Service_ID, Fingerprint, Timestamp),
+            sign_entry(Service_ID);
+        Error ->
+            Error
+    end.
 
 get_fingerprint(Address, Port) ->
     case ssl:connect(Address, Port, ?SOCKET_OPTS) of
@@ -163,7 +171,7 @@ get_fingerprint(Address, Port) ->
             
             {ok, KeyFingerprint};
         {error, Reason} ->
-            error_logger:error_msg("Failed to connect to ~w:~w - ~p\n",
+            error_logger:error_msg("Failed to connect to ~p:~p\n~p\n",
                                    [Address, Port, Reason]),
             {error, Reason}
     end.

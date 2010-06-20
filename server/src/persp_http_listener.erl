@@ -101,8 +101,17 @@ parse_request(String) ->
 do(ModData) ->
     case parse_request(ModData#mod.request_uri) of
         {ok, ParsedRequest} ->
-            Body = persp_scanner_sup:handle_request(http, ParsedRequest),
-            StatusCode = 200;
+            case persp_scanner_sup:handle_request(http, ParsedRequest) of
+                {ok, ParsedResults} ->
+                    Body = ParsedResults,
+                    StatusCode = 200;
+                {error, _Reason} ->
+                    Body = "Scan error",
+                    StatusCode = 500;
+                timeout ->
+                    Body = "Scan timeout",
+                    StatusCode = 500
+            end;
         {error, MalformedRequest} ->
             {SrcPort, SrcIP} = httpd_socket:peername(ModData#mod.socket_type,
                                                      ModData#mod.socket),

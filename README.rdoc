@@ -12,11 +12,11 @@ For more information and a paper on Perspectives, please visit the official webs
 
 =Compiling
 
-Calling <b>make</b> without arguments will compile the entire suite (client + server/scanner). If you need only one component, you can pass <i>client</i> or <i>server</i> to <b>make</b>.
+Calling <b>make</b> without arguments will compile the entire suite (client + server/scanner). If you need only one component, you can pass <i>client</i> or <i>server</i> to <b>make</b> (make <i>common</i> is required in either case).
 
 =Usage - CLIENT
 
-Note: since this software is early in development, I cannot guarantee that the API will remain the same.
+Note: I cannot guarantee that the API will remain the same.
 
 User interaction is done through the <b>persp_interface</b> module:
 * Function_name/Arity - [Arguments]: Description
@@ -71,8 +71,8 @@ If you want more information, it is recommended that you start the eshell with t
 
 =Compatibility
 
-ePerspectives has been tested on Ubuntu 9.10 and 10.04, running Erlang/OTP R13B04.
+ePerspectives has been tested on Ubuntu 9.10, 10.04, and Debian testing/"squeeze", running Erlang/OTP R13B04. It doesn't seem to work with Erlang <= R12B03.
 
 =License
 
-This project is licensed under the EPL 1.0.
+This project is licensed under the EPL 1.0, though this is flexible.

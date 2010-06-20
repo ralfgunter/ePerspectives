@@ -12,6 +12,7 @@
 %% Application and Supervisor callbacks
 -export([start/2, stop/1, init/1]).
 
+%% TODO: put these in a configuration file
 -define(MAX_RESTART,       5).
 -define(MAX_TIME,         60).
 -define(DEF_HTTP_PORT,  8080).

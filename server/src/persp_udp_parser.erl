@@ -10,11 +10,11 @@
 
 -define(SIG_LEN, 172).
 
--export([parse_scandata/1, parse_sid_list/1]).
+-export([parse_clientinfo/1, parse_sid_list/1]).
 -export([prepare_response/2]).
 -export([sign/2]).
 
--record(scan_data, {socket, address, port, data}).
+-record(client_info, {socket, address, port, data}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -22,8 +22,8 @@
 %% Parsing
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-parse_scandata(ScanData) ->
-    << _:80, SIDBin/binary >> = ScanData#scan_data.data,
+parse_clientinfo(ClientInfo) ->
+    << _:80, SIDBin/binary >> = ClientInfo#client_info.data,
     
     parse_sid_bin(SIDBin).
 
@@ -81,7 +81,7 @@ prepare_timestamp({Timestamp_beg, Timestamp_end}, ResultSoFar) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
-%% Signing
+%% Signature handling
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 request_signature(Service_ID) ->

@@ -11,7 +11,7 @@
 
 %% External API
 -export([start_link/1]).
--export([receive_and_send_results/1]).
+-export([send_results/2]).
 
 %% gen_server callbacks
 -export([init/1, terminate/2]).
@@ -20,7 +20,7 @@
 
 -define(UDP_OPTIONS, [binary, {reuseaddr, true}, {active, true}]).
 
--record(scan_data, {socket, address, port, data}).
+-record(client_info, {socket, address, port, data}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -30,14 +30,6 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link(Port) when is_integer(Port) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, Port, []).
-
-receive_and_send_results(ScanData) ->
-    receive
-        {ok, Service_ID, Results} ->
-            BinResults = persp_udp_parser:prepare_response(Service_ID, Results),
-            send_results(ScanData, BinResults)
-        % TODO: handle scan error and timeout
-    end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -73,9 +65,9 @@ handle_cast(_Msg, Socket) ->
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_info({udp, _Socket, ClientAddress, Port, Data}, Socket) ->
-    ScanData = #scan_data{socket = Socket, address = ClientAddress,
-                          port   = Port,   data    = Data},
-    persp_scanner_sup:handle_request(udp, ScanData),
+    ClientInfo = #client_info{socket = Socket, address = ClientAddress,
+                              port   = Port,   data    = Data},
+    persp_scanner_sup:handle_request(udp, ClientInfo),
     
     {noreply, Socket};
 
@@ -88,10 +80,10 @@ handle_info(_Info, Socket) ->
 %% Internal API
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-send_results(ScanData, Results) ->
-    ClientAddress = ScanData#scan_data.address,
-    ClientSocket  = ScanData#scan_data.socket,
-    ClientPort    = ScanData#scan_data.port,
+send_results(ClientInfo, Results) ->
+    ClientAddress = ClientInfo#client_info.address,
+    ClientSocket  = ClientInfo#client_info.socket,
+    ClientPort    = ClientInfo#client_info.port,
     
     case gen_udp:send(ClientSocket, ClientAddress, ClientPort, Results) of
         ok ->
