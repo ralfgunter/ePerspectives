@@ -53,20 +53,15 @@ rescan_all() ->
 init(_Args) ->
     {ok, 'SCAN', #client_info{}}.
 
-handle_info(_Info, StateName, StateData) ->
-    {noreply, StateName, StateData}.
-
 handle_sync_event(Event, _From, StateName, StateData) ->
     {stop, {StateName, undefined_event, Event}, StateData}.
 
 handle_event(Event, StateName, StateData) ->
     {stop, {StateName, undefined_event, Event}, StateData}.
 
-terminate(_Reason, _StateName, _State) ->
-    ok.
-
-code_change(_OldVsn, StateName, StateData, _Extra) ->
-    {ok, StateName, StateData}.
+handle_info(_Info, StateName, StateData) -> {noreply, StateName, StateData}.
+terminate(_Reason, _StateName, _State) -> ok.
+code_change(_OldVsn, StateName, StateData, _E) -> {ok, StateName, StateData}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -18,9 +18,6 @@
 -export([start_link/1]).
 -export([init/1]).
 
--define(MAX_RESTART,  5).
--define(MAX_TIME,    60).
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -32,8 +29,7 @@ sign(Data) ->
     Pid ! {sign, self(), Data, md5},
     
     receive
-        {ok, Signature} ->
-            Signature
+        {ok, Signature} -> Signature
     end.
 
 
@@ -44,22 +40,15 @@ sign(Data) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link(PrivateKeyFilepath) ->
     KeyTuple = prepare_key(PrivateKeyFilepath),
-    
     supervisor:start_link({local, ?MODULE}, ?MODULE, KeyTuple).
 
 init(KeyTuple) ->
     {ok,
-        {_SupFlags = {simple_one_for_one, ?MAX_RESTART, ?MAX_TIME},
-            [
-                % Signer
-                {   signer,
-                    {key_signer, start_link, [KeyTuple]},
-                    temporary,
-                    brutal_kill,
-                    worker,
-                    []
-                }
-            ]
+        { {simple_one_for_one, persp:conf(max_restart), persp:conf(max_time)},
+          [{ signer,
+             {key_signer, start_link, [KeyTuple]},
+             temporary, brutal_kill, worker, []
+          }]
         }
     }.
 

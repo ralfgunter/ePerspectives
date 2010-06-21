@@ -17,10 +17,6 @@
 -export([start_link/1]).
 -export([init/1]).
 
--define(MAX_RESTART,    5).
--define(MAX_TIME,      60).
--define(DEF_TIMEOUT, 5000).
-
 -record(client_info, {socket, address, port, data}).
 
 
@@ -80,25 +76,20 @@ handle_request(udp, ClientInfo) ->
     end,
                                 
     SenderPID = spawn(?MODULE, handle_scan_results,
-                      [OkFun, ErrorFun, TimeoutFun, ?DEF_TIMEOUT]),
+                      [OkFun, ErrorFun, TimeoutFun, persp:conf(def_timeout)]),
     dispatch_scanner(SenderPID, ServerInfo);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% HTTP
 handle_request(http, ServerInfo) ->
-    {Address, Port, Service_type} = ServerInfo,
-    % TODO: this doesn't seem right; investigate.
-    SID = Address ++ ":" ++ integer_to_list(Port) ++ "," ++ Service_type,
-    
     dispatch_scanner(self(), ServerInfo),
-    
     handle_scan_results(
-        fun(_, Results) ->
+        fun(SID, Results) ->
             {ok, persp_http_parser:prepare_response(SID, Results)}
         end,
         fun(Reason) -> {error, Reason} end,
         fun() -> timeout end,
-        ?DEF_TIMEOUT).
+        persp:conf(def_timeout)).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Helper functions
@@ -130,17 +121,11 @@ start_link(ScannerModule) ->
 
 init([ScannerModule]) ->
     {ok,
-        {_SupFlags = {simple_one_for_one, ?MAX_RESTART, ?MAX_TIME},
-            [
-              % Scanner
-              {   scanner,
-                  {ScannerModule, start_link, []},
-                  temporary,
-                  2000,
-                  worker,
-                  []
-              }
-            ]
+        { {simple_one_for_one, persp:conf(max_restart), persp:conf(max_time)},
+          [{ scanner,
+              {ScannerModule, start_link, []},
+              temporary, 2000, worker, []
+          }]
         }
     }.
 

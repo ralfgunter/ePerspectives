@@ -46,17 +46,10 @@ terminate(_Reason, TimerRefs) ->
     delete_timers(TimerRefs),
     ok.
 
-code_change(_OldVersion, TimerRefs, _Extra) ->
-    {ok, TimerRefs}.
-
-handle_call(_Msg, _From, TimerRefs) ->
-    {noreply, TimerRefs}.
-
-handle_cast(_Msg, TimerRefs) ->
-    {noreply, TimerRefs}.
-
-handle_info(_Info, TimerRefs) ->
-    {noreply, TimerRefs}.
+code_change(_OldVersion, TimerRefs, _Extra) -> {ok, TimerRefs}.
+handle_call(_Msg, _From, TimerRefs) -> {noreply, TimerRefs}.
+handle_cast(_Msg, TimerRefs) -> {noreply, TimerRefs}.
+handle_info(_Info, TimerRefs) -> {noreply, TimerRefs}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -74,8 +67,8 @@ prepare_timers(Interval, [CurrentScanner | Rest], TimerRefs) ->
     case timer:apply_interval(Interval, CurrentScanner, rescan_all, []) of
         {ok, TRef} ->
             prepare_timers(Interval, Rest, [{CurrentScanner, TRef} | TimerRefs]);
-        {error, Reason} ->
-            {error, Reason}
+        Error ->
+            Error
     end.
 
 delete_timers(TimerList) ->

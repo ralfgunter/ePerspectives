@@ -12,16 +12,6 @@
 %% Application and Supervisor callbacks
 -export([start/2, stop/1, init/1]).
 
-%% TODO: put these in a configuration file
--define(MAX_RESTART,       5).
--define(MAX_TIME,         60).
--define(DEF_HTTP_PORT,  8080).
--define(DEF_UDP_PORT,  15217).
--define(DEF_BINDADDR,  {127,0,0,1}).
-
-% Rescans all database entries every 24 hours
--define(DEF_RESCAN_PERIOD, (24 * 3600 * 1000)).
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
@@ -29,12 +19,9 @@
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start(_Type, _Args) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE,
-                          [persp_scanner_ssl,
-                           ["../db/sids", "../db/cache", "../db/signatures"]]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-stop(_S) ->
-    ok.
+stop(_S) -> ok.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -42,58 +29,43 @@ stop(_S) ->
 %% Supervisor behaviour callbacks
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-init([ScannerModule, DBFiles]) ->
+init([]) ->
     {ok,
-        {_SupFlags = {one_for_one, ?MAX_RESTART, ?MAX_TIME},
-            [
-              % UDP Listener
-              {   udp_listen,
-                  {persp_udp_listener, start_link, [?DEF_UDP_PORT]},
-                  permanent,
-                  2000,
-                  worker,
-                  [persp_udp_listener]
+        { {one_for_one, persp:conf(max_restart), persp:conf(max_time)},
+          [ % UDP Listener
+            { udp_listen,
+              { persp_udp_listener, start_link, [persp:conf(udp_port)] },
+              permanent, 2000, worker, [persp_udp_listener]
+            },
+            % HTTP Listener
+            { http_listen,
+              { persp_http_listener, start_link,
+                [persp:conf(bind_addr), persp:conf(http_port)]
               },
-              % HTTP Listener
-              {   http_listen,
-                  {persp_http_listener, start_link, [?DEF_BINDADDR, ?DEF_HTTP_PORT]},
-                  permanent,
-                  2000,
-                  worker,
-                  [persp_http_listener]
+              permanent, 2000, worker, [persp_http_listener]
+            },
+            % Scanner instance supervisor
+            { scanner_sup,
+              { persp_scanner_sup, start_link, persp:conf(scanner_modules) },
+              permanent, infinity, supervisor, []
+            },
+            % DB server (caches the scan results)
+            { db_serv,
+              { db_server_dets, start_link, [persp:conf(db_files)] },
+              permanent, 2000, worker, [db_server_dets]
+            },
+            % Key signing supervisor
+            { key_serv,
+              { key_sup, start_link, [persp:conf(private_key)] },
+              permanent, infinity, supervisor, []
+            },
+            % Server that requests rescans
+            { rescan_serv,
+              { rescan_server, start_link,
+                [persp:conf(rescan_interval), persp:conf(scanner_modules)]
               },
-              % Server that requests rescans
-              {   rescan_serv,
-                  {rescan_server, start_link, [?DEF_RESCAN_PERIOD, [ScannerModule]]},
-                  permanent,
-                  2000,
-                  worker,
-                  [rescan_server]
-              },
-              % DB server (caches the scan results)
-              {   db_serv,
-                  {db_server_dets, start_link, [DBFiles]},
-                  permanent,
-                  2000,
-                  worker,
-                  []
-              },
-              % Key signing supervisor
-              {   key_serv,
-                  {key_sup, start_link, ["../keys/private.pem"]},
-                  permanent,
-                  infinity,
-                  supervisor,
-                  []
-              },
-              % Scanner instance supervisor
-              {   scanner_sup,
-                  {persp_scanner_sup, start_link, [ScannerModule]},
-                  permanent,
-                  infinity,
-                  supervisor,
-                  []
-              }
-            ]
+              permanent, 2000, worker, [rescan_server]
+            }
+          ]
         }
     }.

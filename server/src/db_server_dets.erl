@@ -28,19 +28,15 @@ start_link(DBFiles) ->
 
 init(DBFiles) ->
     load_db_files(DBFiles),
-    
-    {ok, {}}.
+    {ok, nil}.
 
 terminate(_Reason, _State) ->
     dets:close(sids),
     dets:close(cache),
     dets:close(signatures).
 
-code_change(_OldVersion, State, _Extra) ->
-    {ok, State}.
-
-handle_info(_Info, State) ->
-    {noreply, State}.
+code_change(_OldVersion, State, _Extra) -> {ok, State}.
+handle_info(_Info, State) -> {noreply, State}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -56,8 +52,7 @@ handle_cast({merge_signature, Service_ID, SignatureInfo}, State) ->
     merge_signature(Service_ID, SignatureInfo),
     {noreply, State};
 
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(_Msg, State) -> {noreply, State}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

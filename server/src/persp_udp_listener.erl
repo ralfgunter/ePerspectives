@@ -49,14 +49,9 @@ terminate(_Reason, Socket) ->
     gen_udp:close(Socket),
     ok.
 
-code_change(_OldVersion, Socket, _Extra) ->
-    {ok, Socket}.
-
-handle_call(Request, _From, Socket) ->
-    {stop, {unknown_call, Request}, Socket}.
-
-handle_cast(_Msg, Socket) ->
-    {noreply, Socket}.
+code_change(_OldVersion, Socket, _Extra) -> {ok, Socket}.
+handle_call(Request, _From, Socket) -> {stop, {unknown_call, Request}, Socket}.
+handle_cast(_Msg, Socket) -> {noreply, Socket}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -71,8 +66,7 @@ handle_info({udp, _Socket, ClientAddress, Port, Data}, Socket) ->
     
     {noreply, Socket};
 
-handle_info(_Info, Socket) ->
-    {noreply, Socket}.
+handle_info(_Info, Socket) -> {noreply, Socket}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

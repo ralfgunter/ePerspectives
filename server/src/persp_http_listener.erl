@@ -20,10 +20,6 @@
 % Module API
 -export([do/1]).
 
--define(SERVER_NAME,   "Perspectives HTTP Server").
--define(SERVER_ROOT,   "../http_root").
--define(DOCUMENT_ROOT, "../http_root/htdocs").
-
 -record(mod,{init_data,
              data=[],
              socket_type=ip_comm,
@@ -55,28 +51,23 @@ start_link(BindAddress, Port) when is_integer(Port) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init({BindAddress, Port}) ->
     Config = [{port, Port}, {bind_address, BindAddress},
-              {server_root, ?SERVER_ROOT}, {document_root, ?DOCUMENT_ROOT},
-              {server_name, ?SERVER_NAME},
+              {server_name,   persp:conf(server_name)},
+              {server_root,   persp:conf(server_root)},
+              {document_root, persp:conf(document_root)},
               {modules, [persp_http_listener]}],
     
-    inets:start(),      % There must be a better way to do this
-    
+    inets:start(),
     inets:start(httpd, Config).
 
 terminate(_Reason, HTTPd_Pid) ->
     inets:stop(httpd, HTTPd_Pid).
 
-code_change(_OldVersion, HTTPd_Pid, _Extra) ->
-    {ok, HTTPd_Pid}.
-
 handle_call(Request, _From, HTTPd_Pid) ->
     {stop, {unknown_call, Request}, HTTPd_Pid}.
 
-handle_cast(_Msg, HTTPd_Pid) ->
-    {noreply, HTTPd_Pid}.
-
-handle_info(_Info, HTTPd_Pid) ->
-    {noreply, HTTPd_Pid}.
+handle_cast(_Msg, HTTPd_Pid) -> {noreply, HTTPd_Pid}.
+handle_info(_Info, HTTPd_Pid) -> {noreply, HTTPd_Pid}.
+code_change(_OldVersion, HTTPd_Pid, _Extra) -> {ok, HTTPd_Pid}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

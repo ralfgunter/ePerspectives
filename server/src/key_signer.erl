@@ -25,7 +25,6 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link(KeyTuple) ->
     Pid = spawn_link(?MODULE, handle_request, [KeyTuple]),
-    
     {ok, Pid}.
 
 
