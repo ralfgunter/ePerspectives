@@ -20,6 +20,7 @@
 % Module API
 -export([do/1]).
 
+% From $ERLANG_SRC_ROOT/lib/inets/src/http_server/httpd.hrl
 -record(mod,{init_data,
              data=[],
              socket_type=ip_comm,

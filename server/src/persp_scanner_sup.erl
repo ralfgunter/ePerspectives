@@ -11,10 +11,9 @@
 
 %% External API
 -export([handle_request/2, handle_scan_results/4]).
--export([get_ssl_scanner/0]).
 
 %% Supervisor behaviour callbacks
--export([start_link/1]).
+-export([start_link/0]).
 -export([init/1]).
 
 -record(client_info, {socket, address, port, data}).
@@ -58,7 +57,7 @@ handle_request(udp, ClientInfo) ->
     end,
     ErrorFun = fun(Reason) ->
         error_logger:error_msg("Error handling request from ~p:~p of
-                                ~p:~p ~p\n~p\n",
+                                ~p:~p ~p\n~s\n",
                                 [ClientInfo#client_info.address,
                                  ClientInfo#client_info.port,
                                  ServerAddress,
@@ -93,14 +92,12 @@ handle_request(http, ServerInfo) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Helper functions
-dispatch_scanner(SenderPID, ServerInfo) ->
-    {_, _, Service_type} = ServerInfo,
-    % TODO: this should be read from a configuration file
-    case Service_type of
-        "2" ->
-            {ok, Pid} = get_ssl_scanner(),
-            persp_scanner_ssl:start_scan(Pid, {SenderPID, ServerInfo})
-    end.
+% TODO: this should be read from a configuration file
+dispatch_scanner(SenderPID, ServerInfo = {_, _, _Service_type = "1"}) ->
+    persp_scanner_sup_ssh:handle_scan(SenderPID, ServerInfo);
+
+dispatch_scanner(SenderPID, ServerInfo = {_, _, _Service_type = "2"}) ->
+    persp_scanner_sup_ssl:handle_scan(SenderPID, ServerInfo).
 
 handle_scan_results(OkFun, ErrorFun, TimeoutFun, Timeout) ->
     receive
@@ -114,29 +111,21 @@ handle_scan_results(OkFun, ErrorFun, TimeoutFun, Timeout) ->
 %% Supervisor behaviour callbacks
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-start_link(ScannerModule) ->
+start_link() ->
     crypto:start(),
-    ssl:start(),
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [ScannerModule]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-init([ScannerModule]) ->
+init([]) ->
     {ok,
-        { {simple_one_for_one, persp:conf(max_restart), persp:conf(max_time)},
-          [{ scanner,
-              {ScannerModule, start_link, []},
-              temporary, 2000, worker, []
-          }]
+        { {one_for_one, persp:conf(max_restart), persp:conf(max_time)},
+          [ { persp_scanner_sup_ssl,
+              {persp_scanner_sup_ssl, start_link, []},
+              permanent, infinity, supervisor, [persp_scanner_sup_ssl]
+            },
+            { persp_scanner_sup_ssh,
+              {persp_scanner_sup_ssh, start_link, []},
+              permanent, infinity, supervisor, [persp_scanner_sup_ssh]
+            }
+          ]
         }
     }.
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%
-%% Scanners
-%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% SSL
-get_ssl_scanner() ->
-    supervisor:start_child(?MODULE, []).

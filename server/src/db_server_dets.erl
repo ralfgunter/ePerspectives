@@ -207,7 +207,7 @@ update_entry(Service_ID, Fingerprint, NewEnd) ->
 % SignatureInfo is of the following format:
 %     {SignatureBinary, SignatureAlgorithm, SignatureLength}
 % Where:
-%     - SignatureBinary is the signature itself
+%     - SignatureBinary    is the signature itself
 %     - SignatureAlgorithm can either be {rsa, md5} or {rsa, sha}
 %     - SignatureLength    currently can only be 172 (bytes)
 

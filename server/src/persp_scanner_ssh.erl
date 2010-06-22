@@ -6,7 +6,7 @@
 %%% terms of this license. You must not remove this notice, or any other, from
 %%% this software.
 
--module(persp_scanner_ssl).
+-module(persp_scanner_ssh).
 -behaviour(gen_fsm).
 
 -define(SOCKET_OPTS, [binary, {reuseaddr, true}, {active, false}]).
@@ -21,6 +21,10 @@
 
 %% FSM states
 -export(['SCAN'/2]).
+
+%% key_cb callbacks
+-export([private_host_rsa_key/2, private_host_dsa_key/2,
+         lookup_host_key/3, add_host_key/3]).
 
 -record(client_info, {socket, address, port, data}).
 
@@ -154,27 +158,20 @@ rescan_entry(Service_ID, Address, Port) ->
             Error
     end.
 
+%% TODO: we seriously need a behaviour.
 get_fingerprint(Address, Port) ->
-    case ssl:connect(Address, Port, ?SOCKET_OPTS, persp:conf(ssl_timeout)) of
-        {ok, Socket} ->
-            PotentialCertificate = ssl:peercert(Socket),
-            ssl:close(Socket),
-            case PotentialCertificate of
-                {ok, Certificate} ->
-                    KeyFingerprint = crypto:md5(Certificate),
-                    
-                    {ok, KeyFingerprint};
-                {error, Reason} ->
-                    error_logger:error_msg(
-                        "Failed to extract certificate from ~p:~p\n~p\n",
-                        [Address, Port, Reason]),
-                    
-                    {error, Reason}
+    case ssh:connect(Address, Port, [{replyto, self()} | persp:conf(ssh_opts)],
+                     persp:conf(ssh_timeout)) of
+        {ok, PID} ->    % either sheer luck or a smarty-pants admin got us in
+            ssh:close(PID),
+            receive
+                {key_fingerprint, Fingerprint} -> {ok, Fingerprint}
             end;
-        {error, Reason} ->
-            error_logger:error_msg("Failed to connect to ~p:~p\n~p\n",
-                                   [Address, Port, Reason]),
-            {error, Reason}
+        {error, _HopefullyNotReallyAnError} ->
+            receive
+                {key_fingerprint, Fingerprint} -> {ok, Fingerprint}
+                after persp:conf(ssh_timeout) -> {error, receive_timeout}
+            end
     end.
 
 % This spawns a new scanner for each element in the service id list
@@ -183,7 +180,7 @@ scan_list(SIDList) ->
     lists:foreach(fun rescan_sid/1, SIDList).
 
 rescan_sid(Service_ID) ->
-    {ok, Pid} = persp_scanner_sup_ssl:get_scanner(),
+    {ok, Pid} = persp_scanner_sup_ssh:get_scanner(),
     {Address, Port, _ServiceType} = persp_udp_parser:parse_sid_list(Service_ID),
     rescan(Pid, Service_ID, Address, Port).
 
@@ -198,3 +195,14 @@ sign_entry(Service_ID) ->
 sign_entry(Service_ID, ScanResults) ->
     SignatureInfo = persp_udp_parser:sign(Service_ID, ScanResults),
     merge_signature(Service_ID, SignatureInfo).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% key_cb - handling the public key sent by the SSH daemon
+add_host_key(_Host, Key, Opts) ->
+    KeyFingerprint = persp_crypto:key_fingerprint(Key),
+    {_replyto, ReplyTo} = lists:keyfind(replyto, 1, Opts),
+    ReplyTo ! {key_fingerprint, KeyFingerprint}.
+
+private_host_rsa_key(_, _) -> ok.
+private_host_dsa_key(_, _) -> ok.
+lookup_host_key(_, _, _) -> {error, not_found}.

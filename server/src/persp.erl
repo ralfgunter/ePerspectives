@@ -7,7 +7,8 @@
 %%% this software.
 
 -module(persp).
--export([conf/1, make_sid/3]).
+-export([conf/1, make_sid/3, time_now/0]).
+-define(UNIX_EPOCH, 62167219200).
 
 %% Basically, here go some miscellaneous functions that used to be scattered
 %% throughout the code.
@@ -19,3 +20,9 @@ conf(Param) ->
 
 make_sid(Address, Port, Service_type) ->
     Address ++ ":" ++ integer_to_list(Port) ++ "," ++ Service_type.
+
+time_now() ->
+    LocalTime = erlang:localtime(),
+    Seconds = calendar:datetime_to_gregorian_seconds(LocalTime) - ?UNIX_EPOCH,
+    
+    Seconds.

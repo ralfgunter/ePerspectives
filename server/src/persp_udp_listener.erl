@@ -46,8 +46,7 @@ init(Port) ->
     end.
 
 terminate(_Reason, Socket) ->
-    gen_udp:close(Socket),
-    ok.
+    gen_udp:close(Socket).
 
 code_change(_OldVersion, Socket, _Extra) -> {ok, Socket}.
 handle_call(Request, _From, Socket) -> {stop, {unknown_call, Request}, Socket}.

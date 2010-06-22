@@ -44,10 +44,10 @@ init([]) ->
               },
               permanent, 2000, worker, [persp_http_listener]
             },
-            % Scanner instance supervisor
+            % Uppermost scanner supervisor
             { scanner_sup,
-              { persp_scanner_sup, start_link, persp:conf(scanner_modules) },
-              permanent, infinity, supervisor, []
+              { persp_scanner_sup, start_link, [] },
+              permanent, infinity, supervisor, [persp_scanner_sup]
             },
             % DB server (caches the scan results)
             { db_serv,
@@ -57,15 +57,15 @@ init([]) ->
             % Key signing supervisor
             { key_serv,
               { key_sup, start_link, [persp:conf(private_key)] },
-              permanent, infinity, supervisor, []
-            },
+              permanent, infinity, supervisor, [key_sup]
+            }%,
             % Server that requests rescans
-            { rescan_serv,
-              { rescan_server, start_link,
-                [persp:conf(rescan_interval), persp:conf(scanner_modules)]
-              },
-              permanent, 2000, worker, [rescan_server]
-            }
+            %{ rescan_serv,
+            %  { rescan_server, start_link,
+            %    [persp:conf(rescan_interval), persp:conf(scanner_modules)]
+            %  },
+            %  permanent, 2000, worker, [rescan_server]
+            %}
           ]
         }
     }.
