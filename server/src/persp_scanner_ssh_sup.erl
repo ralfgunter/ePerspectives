@@ -6,7 +6,7 @@
 %%% terms of this license. You must not remove this notice, or any other, from
 %%% this software.
 
--module(persp_scanner_sup_ssh).
+-module(persp_scanner_ssh_sup).
 -behaviour(supervisor).
 
 %% External API
@@ -27,7 +27,7 @@ get_scanner() ->
 
 handle_scan(SenderPID, ServerInfo) ->
     {ok, Pid} = get_scanner(),
-    persp_scanner_ssh:start_scan(Pid, {SenderPID, ServerInfo}).
+    persp_scanner:start_scan(Pid, {SenderPID, ServerInfo}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

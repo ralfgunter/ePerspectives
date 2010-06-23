@@ -94,10 +94,10 @@ handle_request(http, ServerInfo) ->
 %% Helper functions
 % TODO: this should be read from a configuration file
 dispatch_scanner(SenderPID, ServerInfo = {_, _, _Service_type = "1"}) ->
-    persp_scanner_sup_ssh:handle_scan(SenderPID, ServerInfo);
+    persp_scanner_ssh_sup:handle_scan(SenderPID, ServerInfo);
 
 dispatch_scanner(SenderPID, ServerInfo = {_, _, _Service_type = "2"}) ->
-    persp_scanner_sup_ssl:handle_scan(SenderPID, ServerInfo).
+    persp_scanner_ssl_sup:handle_scan(SenderPID, ServerInfo).
 
 handle_scan_results(OkFun, ErrorFun, TimeoutFun, Timeout) ->
     receive
@@ -119,12 +119,12 @@ init([]) ->
     {ok,
         { {one_for_one, persp:conf(max_restart), persp:conf(max_time)},
           [ { persp_scanner_sup_ssl,
-              {persp_scanner_sup_ssl, start_link, []},
-              permanent, infinity, supervisor, [persp_scanner_sup_ssl]
+              {persp_scanner_ssl_sup, start_link, []},
+              permanent, infinity, supervisor, [persp_scanner_ssl_sup]
             },
             { persp_scanner_sup_ssh,
-              {persp_scanner_sup_ssh, start_link, []},
-              permanent, infinity, supervisor, [persp_scanner_sup_ssh]
+              {persp_scanner_ssh_sup, start_link, []},
+              permanent, infinity, supervisor, [persp_scanner_ssh_sup]
             }
           ]
         }
