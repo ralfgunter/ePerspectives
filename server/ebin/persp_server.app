@@ -3,11 +3,14 @@
   {description, "Perspectives server and scanners"},
   {vsn, "0.1"},
   {id, "persp_server"},
-  {modules,      [persp_udp_listener, persp_http_listener, persp_scanner_ssl,
-                  persp_scanner_ssh, persp_scanner_sup, key_sup, key_signer,
-                  db_server_dets, rescan_server, persp]},
-  {registered,   [udp_listen, http_listen, scanner_sup, db_serv, key_serv,
-                  rescan_server]},
+  {modules, [persp_udp_listener, persp_http_listener,
+             key_sup, persp_scanner_sup, db_server_dets, rescan_server,
+             persp_scanner_ssl_sup, persp_scanner_ssh_sup,
+             persp_scanner_ssl, persp_scanner_ssh, key_signer,
+             persp, persp_scanner]},
+  {registered, [udp_listen, http_listen,
+                key_serv, scanner_sup, db_serv, rescan_server,
+                persp_scanner_ssl_sup, persp_scanner_ssh_sup]},
   {applications, [kernel, stdlib]},
   {mod, {persp_server_app, []}},
   
@@ -26,6 +29,9 @@
          {server_name, "Perspectives HTTP Server"},
          {server_root, "../http_root"},
          {document_root, "../http_root/htdocs"},
+         
+         %% Scanners (for use by rescan_server)
+         {scanner_modules, [persp_scanner_ssl, persp_scanner_ssh]},
          
          %% SSL scanner
          {ssl_timeout, 5000},

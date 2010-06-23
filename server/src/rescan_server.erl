@@ -25,7 +25,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 start_link(Interval_length, ScannerList) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE,
-                            [Interval_length, ScannerList], []).
+                            {Interval_length, ScannerList}, []).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -33,12 +33,14 @@ start_link(Interval_length, ScannerList) ->
 %% gen_server callbacks
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-init([Interval_length, ScannerList]) ->
-    case prepare_timers(Interval_length, ScannerList) of
-        {ok, TimerRefs} ->
+init({Interval_length, ScannerList}) ->
+    TimerRefs = prepare_timers(Interval_length, ScannerList),
+    case lists:keyfind(error, 1, TimerRefs) of
+        [] ->
             {ok, TimerRefs};
-        {error, Reason} ->
-            error_logger:error_msg("Failed to setup timers: ~p\n", [Reason]),
+        [{error, Reason} | _PossiblyMoreErrors] ->
+            error_logger:error_msg("Failed to setup one of the timers: ~p\n",
+                                   [Reason]),
             {error, Reason}
     end.
 
@@ -58,18 +60,9 @@ handle_info(_Info, TimerRefs) -> {noreply, TimerRefs}.
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 prepare_timers(Interval, ScannerList) ->
-    prepare_timers(Interval, ScannerList, []).
-
-prepare_timers(_Interval, [], TimerRefs) ->
-    {ok, TimerRefs};
-
-prepare_timers(Interval, [CurrentScanner | Rest], TimerRefs) ->
-    case timer:apply_interval(Interval, CurrentScanner, rescan_all, []) of
-        {ok, TRef} ->
-            prepare_timers(Interval, Rest, [{CurrentScanner, TRef} | TimerRefs]);
-        Error ->
-            Error
-    end.
+    lists:map(fun(Scanner) ->
+        timer:apply_interval(Interval, persp_scanner, rescan_all, [Scanner])end,
+        ScannerList).
 
 delete_timers(TimerList) ->
     lists:foreach(fun(Ref) -> timer:cancel(Ref) end, TimerList).
