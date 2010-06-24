@@ -36,9 +36,9 @@ start_link(Interval_length, ScannerList) ->
 init({Interval_length, ScannerList}) ->
     TimerRefs = prepare_timers(Interval_length, ScannerList),
     case lists:keyfind(error, 1, TimerRefs) of
-        [] ->
+        false ->
             {ok, TimerRefs};
-        [{error, Reason} | _PossiblyMoreErrors] ->
+        {error, Reason} ->
             error_logger:error_msg("Failed to setup one of the timers: ~p\n",
                                    [Reason]),
             {error, Reason}
